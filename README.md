@@ -3,8 +3,9 @@
 A passive network monitor for IoT / OT networks, written in Python. It captures
 traffic (live or from a pcap), decodes it down to the MQTT topic and DNS
 query, builds a persistent device inventory, learns how each device normally
-behaves, runs eight detection rules (DET-001 to DET-008), stores the results
-in SQLite / JSONL / CSV, and shows them on a web dashboard.
+behaves, monitors the IoT protocol itself (MQTT clients, topics and message
+rates), runs nine detection rules (DET-001 to DET-009), stores the results in
+SQLite / JSONL / CSV, and shows them on a web dashboard.
 
 It comes with a Docker lab of simulated IoT devices to monitor, a
 deterministic sample capture of a Mirai-style intrusion, and one controlled
@@ -23,10 +24,10 @@ IoT / OT devices ──▶ Python monitor ──▶ Detection engine ──▶ L
 
 | Skill | Where |
 |---|---|
-| **Python development** | Clean package with a CLI, typed dataclasses, 67 pytest tests, a Flask API ([`iotmon/`](iotmon)) |
+| **Python development** | Clean package with a CLI, typed dataclasses, 88 pytest tests, a Flask API ([`iotmon/`](iotmon)) |
 | **Networking** | Layer-by-layer parsing (Ethernet → ARP/IP → TCP/UDP → MQTT/DNS/HTTP), flows vs packets, SPAN-style capture. Explained in **[Week 1: what the monitor sees and why](docs/01-networking-foundation.md)** |
 | **Detection engineering** | Eight stateful rules with IDs, sliding windows and thresholds learned from each device's own behaviour, evidence-record alerts, ATT&CK mapping, documented false positives and blind spots, controlled test scenarios including a near miss that must stay silent (**[Week 3: detection engine](docs/03-detection-engine.md)**, [rules](docs/detection-rules.md)) |
-| **IoT / OT security** | Passive asset inventory with an approve workflow ([Week 2](docs/02-device-inventory.md)), rogue-device and ARP-spoofing detection, MQTT authentication monitoring, exposed Telnet, botnet C2 and flood behaviour, OUI vendor fingerprinting |
+| **IoT / OT security** | MQTT protocol monitoring: who connects to the broker, who publishes which topic, message rates, topic spoofing (**[Week 4](docs/04-iot-protocols.md)**). Passive asset inventory with an approve workflow ([Week 2](docs/02-device-inventory.md)), rogue-device and ARP-spoofing detection, MQTT authentication monitoring, exposed Telnet, botnet C2 and flood behaviour, OUI vendor fingerprinting |
 
 ## Quick start (no Docker, no admin rights)
 
@@ -54,6 +55,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:35:10  [ALERT HIGH]     DET-002 port_scan: Port scan: 192.168.1.66 probed 15 ports on 192.168.1.22
 10:35:30  [ALERT HIGH]     DET-004 suspicious_port: TELNET session 192.168.1.66 -> 192.168.1.22:23
 10:35:52  [ALERT MEDIUM]   DET-007 failed_connections: Repeated failed connections: 192.168.1.66 -> 192.168.1.21:23 (10x)
+10:36:00  [ALERT MEDIUM]   DET-009 mqtt_activity: New MQTT client: 192.168.1.66 connected to broker 192.168.1.10 as 'probe-0'
 10:36:06  [ALERT HIGH]     DET-007 failed_connections: MQTT authentication failures: 192.168.1.66 refused 5x by broker 192.168.1.10
 10:36:35  [ALERT MEDIUM]   DET-005 external_connection: Unexpected external connection: 192.168.1.22 -> 198.51.100.23:6667 (cnc.badbot.example)
 10:36:35  [ALERT CRITICAL] DET-004 suspicious_port: IRC session 192.168.1.22 -> 198.51.100.23:6667
@@ -61,7 +63,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:36:40  [ALERT MEDIUM]   DET-003 connection_rate: Abnormal connection rate: 192.168.1.22 opened 20 connections in 60s (baseline peak 4)
 10:36:50  [ALERT HIGH]     DET-006 traffic_spike: Traffic spike: 192.168.1.22 sent 591,031 bytes in 10s (baseline 9,027)
 
-3546 packets, 7 devices, 11 alerts
+3546 packets, 7 devices, 12 alerts
 ```
 
 Full outputs are in [`docs/sample-output/`](docs/sample-output).
@@ -94,7 +96,7 @@ raises a high one. Both were validated live in the Docker lab. Details:
 
 ## Detection engine (Week 3)
 
-Eight rules, each with an ID. None of them is "if port == X then hacker":
+Nine rules, each with an ID. None of them is "if port == X then hacker":
 each counts something inside a time window and compares it with a
 threshold, and the core rules take that threshold from the device's own
 **behavioural baseline** (the ports it uses and serves, its internet peers,
@@ -114,8 +116,11 @@ det-002-port-scan              DET-002              DET-002                   1 
 det-003-connection-flood       DET-003              DET-003                   1  PASS
 det-004-unusual-port           DET-004              DET-004                   2  PASS
 det-005-external-connection    DET-005              DET-005                   2  PASS
+det-009-new-mqtt-client        DET-004, DET-009     DET-004, DET-009          3  PASS
+det-009-message-burst          DET-009              DET-009                   1  PASS
+det-009-topic-spoofing         DET-009              DET-009                   1  PASS
 near-miss-below-thresholds     none                 none                      0  PASS
-iot-lab (full kill chain)      DET-001..007         DET-001..007             11  PASS
+iot-lab (full kill chain)      DET-001..007, 009    DET-001..007, 009        12  PASS
 ```
 
 Every alert is an evidence record in `alerts.jsonl`:
@@ -129,11 +134,40 @@ The same scenarios run live against the Docker lab with
 `python tools/lab_scenarios.py`. Details, threshold reasoning and results:
 **[Week 3: detection engine](docs/03-detection-engine.md)**.
 
+## IoT protocol monitoring: MQTT (Week 4)
+
+The monitor decodes MQTT, the publish/subscribe protocol most IoT sensors
+use, and keeps a broker-level view: which clients connect (client ID,
+host, username), which topics each one publishes and subscribes to, message
+counts and the last value per topic.
+
+```
+$ docker compose exec dashboard python -m iotmon mqtt --db /data/iotmon.db   # live lab, after the scenarios
+CLIENT ID                      HOST            BROKER          CONN REFUSED   MSGS  PUBLISHES TO / SUBSCRIBED TO
+temp-sensor-01                 172.28.0.20     172.28.0.10        1       0     53  factory/temperature
+temp-sensor-01-diag            172.28.0.20     172.28.0.10        2       0    151  factory/motor/rpm, factory/temperature
+smart-plug-01                  172.28.0.21     172.28.0.10        1       0     26  factory/line1/plug/power  [sub: factory/line1/plug/cmd]
+172.28.0.23 (no CONNECT seen)  172.28.0.23     172.28.0.10        0       0    260  factory/motor/rpm, factory/pressure
+mqtt-explorer-4f2a             172.28.0.5      172.28.0.10        1       0      0  -  [sub: #]
+
+TOPIC                            MESSAGES  LAST VALUE               PUBLISHERS
+factory/line1/plug/power               26  {"w": 41.6, "on": true}  smart-plug-01
+factory/motor/rpm                     131  1475                     172.28.0.23 (no CONNECT seen), temp-sensor-01-diag
+factory/pressure                      130  1.81                     172.28.0.23 (no CONNECT seen)
+factory/temperature                   203  24.8                     temp-sensor-01, temp-sensor-01-diag
+```
+
+DET-009 compares that activity with what each device did during the
+baseline: a new host or client ID on the broker, a message burst, a topic a
+client never used, a topic that belongs to *another* device (spoofed
+telemetry, high), or a subscription to every topic (`#`). Details:
+**[Week 4: IoT protocols](docs/04-iot-protocols.md)**.
+
 ## Live lab (Docker)
 
 ```bash
 cd lab
-docker compose up -d --build          # broker, 3 IoT devices, cloud, DNS, admin, monitor, dashboard
+docker compose up -d --build          # broker, 4 IoT devices, cloud, DNS, admin, monitor, dashboard
 # http://localhost:8080
 ```
 
@@ -153,6 +187,7 @@ live detection check are in the [lab guide](docs/lab-setup.md).
 | `iotmon inventory learn FILE.pcap` | Build the asset register from trusted traffic (`-d SECONDS` to use only the start) |
 | `iotmon inventory show` / `approve MAC_OR_IP` | Review the register (`--json` keyed by IP); approve pending devices (`--all`) |
 | `iotmon baseline learn FILE.pcap` | Learn each device's normal behaviour from trusted traffic (`-d SECONDS`, `--force` to replace) |
+| `iotmon mqtt` | MQTT clients (ID, host, broker, messages, topics, subscriptions) and topics (messages, last value, publishers) from the database |
 | `iotmon baseline show` | Ports each device uses and serves, its internet peers and peak connection rate (`--json`) |
 | `iotmon dashboard` | Web dashboard on `127.0.0.1:8080` |
 
@@ -175,21 +210,22 @@ per-minute traffic), `alerts.jsonl` (SIEM-ready), `packets.csv` (with `--csv`),
 | DET-006 | `traffic_spike` | Device tx/rx per 10 s > max(mean + 4σ, 5×mean, 50 kB) of its own history | T1498 / ICS T0814 |
 | DET-007 | `failed_connections` | ≥ 10 refused/unanswered connections to one service, or ≥ 5 MQTT login refusals, in 60 s | T1110 / ICS T0812 |
 | DET-008 | `device_change` | An IP claimed by a second MAC (ARP spoofing), or a known MAC on a new IP | T1557.002 / ICS T0830 |
+| DET-009 | `mqtt_activity` | New host/client ID on the broker; publishes in 60 s ≥ max(30, 5 × learned peak); new topic; another device's topic (spoofing); `#` subscription | ICS T0856, T0855, T0801 |
 
 Logic, threshold reasoning, false positives, and known gaps: [docs/detection-rules.md](docs/detection-rules.md).
 
 ## Project layout
 
 ```
-iotmon/               the monitor (capture, parser, flows, inventory, assets, baseline, detections, storage, dashboard, cli)
+iotmon/               the monitor (capture, parser, flows, inventory, assets, baseline, mqtt, detections, storage, dashboard, cli)
 lab/                  Docker lab: Mosquitto broker, dnsmasq, simulated devices, monitor + dashboard;
                       scenarios/attacks.py holds the controlled attack actions for the live tests
 samples/iot-lab.pcap  8-minute synthetic capture: 5 min baseline, then the intrusion
-samples/scenarios/    one 4-minute capture per test scenario (DET-001..005 and a near miss)
+samples/scenarios/    one 4-minute capture per test scenario (DET-001..005, three MQTT, a near miss)
 tools/                generate_sample_pcap.py, generate_scenarios.py (deterministic: same bytes every run),
                       run_scenarios.py (replay and check), lab_scenarios.py (run live in the Docker lab)
 tests/                parser, per-rule, scenario, end-to-end and dashboard tests
-docs/                 Week 1-3 write-ups, architecture, rules, lab guide, roadmap
+docs/                 Week 1-4 write-ups, architecture, rules, lab guide, roadmap
 ```
 
 ## Tests
@@ -202,7 +238,8 @@ python -m pytest
 These cover parsing of every supported protocol, positive and negative cases
 for each rule, each controlled scenario triggering exactly its rules (and the
 near miss triggering none), the full intrusion timeline producing exactly the
-expected 11 alerts, **zero alerts during the 5-minute baseline**, storage outputs, the
+expected 12 alerts, **zero alerts during the 5-minute baseline**, the MQTT tracker and
+every DET-009 check, storage outputs, the
 dashboard API, and the Week 2 inventory: record fields, the asset register
 (round trip, bootstrap, replay-safe counters), IP-conflict and IP-change
 events, and the full learn → detect → approve workflow.
@@ -212,10 +249,11 @@ events, and the full learn → detect → approve workflow.
 1. [Week 1: Networking foundation and what the monitor sees](docs/01-networking-foundation.md)
 2. [Week 2: Device discovery and asset inventory](docs/02-device-inventory.md)
 3. [Week 3: Detection engine and test scenarios](docs/03-detection-engine.md)
-4. [Architecture](docs/architecture.md)
-5. [Detection rules](docs/detection-rules.md)
-6. [Lab setup](docs/lab-setup.md)
-7. [Roadmap](docs/roadmap.md)
+4. [Week 4: IoT protocols (MQTT)](docs/04-iot-protocols.md)
+5. [Architecture](docs/architecture.md)
+6. [Detection rules](docs/detection-rules.md)
+7. [Lab setup](docs/lab-setup.md)
+8. [Roadmap](docs/roadmap.md)
 
 ## Scope
 

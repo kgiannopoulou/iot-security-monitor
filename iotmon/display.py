@@ -19,6 +19,8 @@ DETAIL_RULES = {
                         ("Threshold", "threshold"), ("Top targets", "top_targets")),
     "suspicious_port": (("Why", "reasons"),),
     "external_connection": (("Why", "reasons"), ("Usual peers", "usual_external_peers")),
+    "mqtt_activity": (("Client", "client"), ("Why", "reasons"), ("Topic", "topic"), ("Value", "value"),
+                      ("Usual topics", "usual_topics"), ("Top topics", "top_topics")),
 }
 
 

@@ -1,5 +1,6 @@
 """Generate samples/scenarios/*.pcap: one controlled test scenario per core
-detection rule (DET-001 to DET-005), plus a near-miss scenario that stays
+detection rule (DET-001 to DET-005), three for MQTT activity (DET-009),
+plus a near-miss scenario that stays
 just under the thresholds and must stay silent.
 
 Every scenario is the same small IoT network as samples/iot-lab.pcap: four
@@ -19,8 +20,8 @@ from pathlib import Path
 from typing import Callable
 
 from generate_sample_pcap import (BROKER, CAMERA, GW, LAPTOP, PLUG, ROGUE, START, TEMP, Capture, baseline,
-                                  l2, mqtt_connect)
-from scapy.contrib.mqtt import MQTT, MQTTConnack
+                                  l2, mqtt_connect, mqtt_publish)
+from scapy.contrib.mqtt import MQTT, MQTTConnack, MQTTSuback, MQTTSubscribe, MQTTTopicQOS
 from scapy.layers.inet import TCP, UDP
 from scapy.layers.ntp import NTP
 from scapy.packet import Raw
@@ -115,6 +116,38 @@ def near_miss(cap: Capture) -> None:
     cap.tls_bulk(T + 30.1, PLUG[0], "203.0.113.50", upload=700)
 
 
+def _publish_on_session(cap: Capture, t: float, dev, topic: str, value: str) -> None:
+    """A PUBLISH on the device's existing MQTT session (opened by the baseline)."""
+    sport, cseq, sseq = cap.mqtt_ports[dev[0]]
+    payload = mqtt_publish(topic, value)
+    cap.add(t, l2(dev[0], BROKER[0]) / TCP(sport=sport, dport=1883, flags="PA", seq=cseq, ack=sseq) / payload)
+    cap.add(t + 0.004, l2(BROKER[0], dev[0]) / TCP(sport=1883, dport=sport, flags="A", seq=sseq, ack=cseq + len(payload)))
+    cap.mqtt_ports[dev[0]][1] = cseq + len(payload)
+
+
+def mqtt_new_client(cap: Capture) -> None:
+    """The admin laptop, which never used MQTT, connects to the broker with a
+    desktop MQTT client and subscribes to every topic ('#')."""
+    cap.tcp_session(T, LAPTOP[0], BROKER[0], 1883,
+                    c2s=[mqtt_connect("mqtt-explorer-4f2a", "devices", "S3nsor!2026"),
+                         MQTT(type=8, QOS=1) / MQTTSubscribe(msgid=1, topics=[MQTTTopicQOS(topic="#", QOS=0)])],
+                    s2c=[MQTT(type=2) / MQTTConnack(retcode=0), MQTT(type=9) / MQTTSuback(msgid=1, retcodes=[0])],
+                    close=False)
+
+
+def mqtt_burst(cap: Capture) -> None:
+    """The temperature sensor's firmware misbehaves: 10 readings per second
+    for 20 s on its usual topic and session (normally one every 5 s)."""
+    for i in range(200):
+        _publish_on_session(cap, T + i * 0.1, TEMP, "factory/line1/temp", '{"c": 21.70}')
+
+
+def mqtt_spoofing(cap: Capture) -> None:
+    """The temperature sensor publishes on the smart plug's power topic: a
+    reading no device should be able to fake."""
+    _publish_on_session(cap, T + 0.5, TEMP, "factory/line1/plug/power", '{"w": 0.0, "on": false}')
+
+
 SCENARIOS = [
     Scenario("det-001-new-device", ("DET-001",),
              "Unknown Raspberry Pi joins the network (ARP, NTP, DNS)", new_device),
@@ -126,6 +159,12 @@ SCENARIOS = [
              "Sensor opens HTTP (unusual for it) and Telnet (high-risk) sessions to the camera", unusual_port),
     Scenario("det-005-external-connection", ("DET-005",),
              "Local-only sensor dials 198.51.100.23 by IP; plug calls an unknown host", external_connection),
+    Scenario("det-009-new-mqtt-client", ("DET-004", "DET-009"),
+             "Admin laptop (never used MQTT) connects to the broker and subscribes to '#'", mqtt_new_client),
+    Scenario("det-009-message-burst", ("DET-009",),
+             "Sensor publishes 10 messages/s for 20 s on its usual topic and session", mqtt_burst),
+    Scenario("det-009-topic-spoofing", ("DET-009",),
+             "Sensor publishes on the smart plug's power topic", mqtt_spoofing),
     Scenario("near-miss-below-thresholds", (),
              "12-port probe, 12 reconnects/min, extra cloud check-in: all under threshold", near_miss),
 ]

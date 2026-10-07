@@ -8,6 +8,8 @@ normal *for this device*?". The answer comes from a profile per device:
     server_ports    ports it answers on                camera: {80}
     external_peers  internet hosts it talks to         plug: {203.0.113.50}
     peak_connections  most new connections it opened in any one window
+    mqtt_*          client IDs it connected to the broker with, topics it
+                    published and subscribed to, most messages per window
 
 A profile is learned from traffic during a learning period (the first
 minutes of a capture, or a whole trusted capture with `iotmon baseline
@@ -35,10 +37,19 @@ class DeviceProfile:
     server_ports: set = field(default_factory=set)
     external_peers: set = field(default_factory=set)
     peak_connections: int = 0
+    mqtt_client_ids: set = field(default_factory=set)
+    mqtt_publish: set = field(default_factory=set)
+    mqtt_subscribe: set = field(default_factory=set)
+    peak_mqtt_messages: int = 0
 
     def as_dict(self) -> dict:
-        return {"client_ports": sorted(self.client_ports), "server_ports": sorted(self.server_ports),
-                "external_peers": sorted(self.external_peers), "peak_connections": self.peak_connections}
+        d = {"client_ports": sorted(self.client_ports), "server_ports": sorted(self.server_ports),
+             "external_peers": sorted(self.external_peers), "peak_connections": self.peak_connections}
+        if self.mqtt_client_ids or self.mqtt_publish or self.mqtt_subscribe:
+            d.update({"mqtt_client_ids": sorted(self.mqtt_client_ids), "mqtt_publish": sorted(self.mqtt_publish),
+                      "mqtt_subscribe": sorted(self.mqtt_subscribe),
+                      "peak_mqtt_messages": self.peak_mqtt_messages})
+        return d
 
 
 class Baseline:
@@ -86,6 +97,23 @@ class Baseline:
         prof = self.devices.setdefault(client, DeviceProfile())
         prof.peak_connections = max(prof.peak_connections, connections)
 
+    def observe_mqtt(self, kind: str, ip: str, client_id: str, topic: str) -> None:
+        prof = self.devices.setdefault(ip, DeviceProfile())
+        if kind == "connect" and client_id:
+            prof.mqtt_client_ids.add(client_id)
+        elif kind == "publish":
+            prof.mqtt_publish.add(topic)
+        elif kind == "subscribe":
+            prof.mqtt_subscribe.add(topic)
+
+    def observe_mqtt_rate(self, ip: str, messages: int) -> None:
+        prof = self.devices.setdefault(ip, DeviceProfile())
+        prof.peak_mqtt_messages = max(prof.peak_mqtt_messages, messages)
+
+    def topic_owners(self, topic: str) -> set[str]:
+        """Devices that published this topic during the baseline."""
+        return {ip for ip, p in self.devices.items() if topic in p.mqtt_publish}
+
     def mark_learned(self, start: float, end: float, packets: int) -> None:
         def iso(ts):
             return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat(timespec="seconds")
@@ -98,7 +126,9 @@ class Baseline:
         self.learned = data.get("learned_from", {})
         for ip, d in data.get("devices", {}).items():
             self.devices[ip] = DeviceProfile(set(d.get("client_ports", [])), set(d.get("server_ports", [])),
-                                             set(d.get("external_peers", [])), int(d.get("peak_connections", 0)))
+                                             set(d.get("external_peers", [])), int(d.get("peak_connections", 0)),
+                                             set(d.get("mqtt_client_ids", [])), set(d.get("mqtt_publish", [])),
+                                             set(d.get("mqtt_subscribe", [])), int(d.get("peak_mqtt_messages", 0)))
 
     def save(self) -> None:
         if not self.path:

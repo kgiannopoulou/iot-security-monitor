@@ -1,0 +1,40 @@
+$ python -m iotmon read samples/det-009-new-mqtt-client.pcap -q --utc --db data/det-009-new-mqtt-client.db
+10:33:00  [ALERT MEDIUM] DET-004 suspicious_port: Unusual port: 192.168.1.5 -> 192.168.1.10:1883 (MQTT), outside the baseline
+          Why:           192.168.1.5 never connected to port 1883 during the baseline
+10:33:00  [ALERT MEDIUM] DET-009 mqtt_activity: New MQTT client: 192.168.1.5 connected to broker 192.168.1.10 as 'mqtt-explorer-4f2a'
+          Client:        mqtt-explorer-4f2a
+          Why:           host never used MQTT during the baseline
+10:33:00  [ALERT MEDIUM] DET-009 mqtt_activity: Broad MQTT subscription: 192.168.1.5 subscribed to '#' (every topic)
+          Client:        mqtt-explorer-4f2a
+          Topic:         #
+
+459 packets, 6 devices, 3 alerts
+alerts by severity: medium=3
+
+$ python -m iotmon read samples/det-009-message-burst.pcap -q --utc --db data/det-009-message-burst.db
+10:33:05  [ALERT MEDIUM] DET-009 mqtt_activity: MQTT message burst: 192.168.1.20 published 65 messages in 60s (baseline peak 13)
+          Client:        temp-sensor-01
+          Top topics:    factory/line1/temp x65
+
+852 packets, 6 devices, 1 alerts
+alerts by severity: medium=1
+
+$ python -m iotmon read samples/det-009-topic-spoofing.pcap -q --utc --db data/det-009-topic-spoofing.db
+10:33:00  [ALERT HIGH] DET-009 mqtt_activity: MQTT topic spoofing: 192.168.1.20 published to 'factory/line1/plug/power', normally published only by 192.168.1.21
+          Client:        temp-sensor-01
+          Topic:         factory/line1/plug/power
+          Value:         {"w": 0.0, "on": false}
+          Usual topics:  factory/line1/temp
+
+454 packets, 6 devices, 1 alerts
+alerts by severity: high=1
+
+$ python -m iotmon mqtt --db data/det-009-topic-spoofing.db
+MQTT CLIENTS
+CLIENT ID                      HOST            BROKER          CONN REFUSED   MSGS  PUBLISHES TO / SUBSCRIBED TO
+temp-sensor-01                 192.168.1.20    192.168.1.10       1       0     48  factory/line1/plug/power, factory/line1/temp
+smart-plug-01                  192.168.1.21    192.168.1.10       1       0     23  factory/line1/plug/power
+
+TOPIC                            MESSAGES  LAST VALUE               PUBLISHERS
+factory/line1/plug/power               24  {"w": 40.8, "on": true}  smart-plug-01, temp-sensor-01
+factory/line1/temp                     47  {"c": 22.55}             temp-sensor-01

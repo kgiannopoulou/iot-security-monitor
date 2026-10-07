@@ -123,10 +123,14 @@ def _parse_application(pkt: Packet, rec: PacketRecord) -> None:
         while isinstance(layer, MQTT):
             ptype = CONTROL_PACKET_TYPE.get(int(layer.type), str(layer.type))
             body = layer.payload
+            rec.meta.setdefault("mqtt_types", []).append(ptype)
             if ptype == "CONNECT":
                 client_id = _text(body.clientId)
                 rec.meta["mqtt_client_id"] = client_id
+                rec.meta["mqtt_keepalive"] = int(body.klive)
+                # The username identifies the account; the password is never recorded.
                 user = _text(getattr(body, "username", b"")) if body.usernameflag else ""
+                rec.meta["mqtt_username"] = user
                 parts.append(f"CONNECT id={client_id}" + (f" user={user}" if user else ""))
             elif ptype == "CONNACK":
                 code = int(body.retcode)
@@ -134,10 +138,14 @@ def _parse_application(pkt: Packet, rec: PacketRecord) -> None:
                 parts.append(f"CONNACK {MQTT_CONNACK_CODES.get(code, code)}")
             elif ptype == "PUBLISH":
                 topic = _text(body.topic)
+                value = _text(body.value)
                 rec.meta.setdefault("mqtt_topics", []).append(topic)
-                parts.append(f"PUBLISH {topic}")
+                rec.meta.setdefault("mqtt_messages", []).append(
+                    {"topic": topic, "value": value[:64], "qos": int(layer.QOS), "retain": bool(layer.RETAIN)})
+                parts.append(f"PUBLISH {topic} = {value[:24]}")
             elif ptype == "SUBSCRIBE":
                 topics = [_text(t.topic) for t in getattr(body, "topics", [])]
+                rec.meta.setdefault("mqtt_subscriptions", []).extend(topics)
                 parts.append(f"SUBSCRIBE {','.join(topics)}")
             else:
                 parts.append(ptype)

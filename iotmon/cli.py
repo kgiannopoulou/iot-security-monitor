@@ -8,6 +8,7 @@
     python -m iotmon inventory show                   # list known assets
     python -m iotmon baseline learn baseline.pcap     # learn normal behaviour per device
     python -m iotmon baseline show                    # what each device normally does
+    python -m iotmon mqtt                             # MQTT clients and topics from the database
 """
 
 from __future__ import annotations
@@ -133,12 +134,48 @@ def cmd_report(args) -> int:
         print(f"  {f['client_ip']:>15}:{f['client_port'] or '':<5} -> {f['server_ip']}:{f['server_port'] or ''}"
               f"  {f['protocol']}/{f['app'] or '?':<8} {f['packets']:>6} pkts {f['bytes']:>9} B  {f['state']}")
 
+    _print_mqtt(db, indent="  ", heading="\nMQTT CLIENTS")
+
     print("\nALERTS")
     rows = db.execute("SELECT * FROM alerts ORDER BY ts").fetchall()
     for a in rows:
         print(f"  {t(a['ts'])}  {a['severity'].upper():<8} {a['rule_id'] or '':<8} {a['rule']:<19} {a['title']}")
     if not rows:
         print("  none")
+    return 0
+
+
+def _print_mqtt(db, indent: str = "", heading: str = "MQTT CLIENTS") -> bool:
+    try:
+        clients = db.execute("SELECT * FROM mqtt_clients ORDER BY broker, ip, key").fetchall()
+        topics = db.execute("SELECT * FROM mqtt_topics ORDER BY topic").fetchall()
+    except sqlite3.OperationalError:  # database from before Week 4
+        return False
+    if not clients:
+        return False
+    print(heading)
+    print(f"{indent}{'CLIENT ID':<30} {'HOST':<15} {'BROKER':<15} {'CONN':>4} {'REFUSED':>7} {'MSGS':>6}  PUBLISHES TO / SUBSCRIBED TO")
+    for c in clients:
+        pubs = c["topics"].replace(",", ", ") or "-"
+        subs = c["subscriptions"].replace(",", ", ")
+        print(f"{indent}{(c['client_id'] or c['key'])[:30]:<30} {c['ip']:<15} {c['broker']:<15} {c['connects']:>4} "
+              f"{c['refused']:>7} {c['messages']:>6}  {pubs}" + (f"  [sub: {subs}]" if subs else ""))
+    print(f"\n{indent}{'TOPIC':<32} {'MESSAGES':>8}  {'LAST VALUE':<24} PUBLISHERS")
+    for t in topics:
+        print(f"{indent}{t['topic'][:32]:<32} {t['messages']:>8}  {t['last_value'][:24]:<24} "
+              f"{t['publishers'].replace(',', ', ')}")
+    return True
+
+
+def cmd_mqtt(args) -> int:
+    if not Path(args.db).exists():
+        print(f"error: no database at {args.db} - run 'read' or 'live' first", file=sys.stderr)
+        return 1
+    db = sqlite3.connect(args.db)
+    db.row_factory = sqlite3.Row
+    if not _print_mqtt(db):
+        print("no MQTT traffic in this database", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -283,6 +320,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--db", default=DEFAULT_DB)
     p.add_argument("--utc", action="store_true")
     p.set_defaults(func=cmd_report)
+
+    p = sub.add_parser("mqtt", help="print MQTT clients and topics from the database")
+    p.add_argument("--db", default=DEFAULT_DB)
+    p.set_defaults(func=cmd_mqtt)
 
     p = sub.add_parser("inventory", help="manage the asset register (known devices)")
     inv = p.add_subparsers(dest="action", required=True)

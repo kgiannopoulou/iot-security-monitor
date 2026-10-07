@@ -1,4 +1,4 @@
-# IoT lab: an MQTT broker, three simulated devices, a vendor "cloud", a DNS
+# IoT lab: an MQTT broker, four simulated devices, a vendor "cloud", a DNS
 # server and an admin workstation on one bridge network, plus the monitor
 # sniffing that bridge and the dashboard reading the monitor's database.
 #
@@ -45,6 +45,12 @@ services:
     environment: { ROLE: temp_sensor, CLIENT_ID: temp-sensor-01 }
     networks: { iotlab: { ipv4_address: 172.28.0.20 } }
     mac_address: "24:0a:c4:00:00:20"   # Espressif OUI
+
+  motor-drive:
+    <<: *device
+    environment: { ROLE: motor_drive, CLIENT_ID: motor-drive-01 }
+    networks: { iotlab: { ipv4_address: 172.28.0.23 } }
+    mac_address: "00:1b:1b:00:00:23"   # Siemens OUI (drive controller)
 
   smart-plug:
     <<: *device

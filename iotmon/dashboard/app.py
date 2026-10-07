@@ -76,6 +76,14 @@ def create_app(db_path: str | Path) -> Flask:
             series.setdefault(r["app"], [0] * len(minutes))[index[r["minute"]]] += r["packets"]
         return jsonify({"minutes": minutes, "series": series})
 
+    @app.get("/api/mqtt")
+    def mqtt():
+        """MQTT clients and topics (Week 4)."""
+        return jsonify({
+            "clients": query("SELECT * FROM mqtt_clients ORDER BY broker, ip, key"),
+            "topics": query("SELECT * FROM mqtt_topics ORDER BY topic"),
+        })
+
     @app.get("/api/flows")
     def flows():
         return jsonify(query("SELECT * FROM flows ORDER BY bytes DESC LIMIT 25"))

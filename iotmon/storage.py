@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .flows import Flow
 from .inventory import Device
+from .mqtt import MqttTracker
 from .models import Alert, PacketRecord
 
 SCHEMA = """
@@ -63,6 +64,31 @@ CREATE TABLE IF NOT EXISTS flows (
     packets_c2s INTEGER,
     packets_s2c INTEGER,
     state       TEXT
+);
+
+-- MQTT view (Week 4): one row per client and per topic, replaced on each commit.
+CREATE TABLE IF NOT EXISTS mqtt_clients (
+    key           TEXT PRIMARY KEY,
+    client_id     TEXT,
+    ip            TEXT,
+    broker        TEXT,
+    username      TEXT,
+    first_seen    REAL,
+    last_seen     REAL,
+    connects      INTEGER,
+    refused       INTEGER,
+    messages      INTEGER,
+    topics        TEXT,
+    subscriptions TEXT
+);
+
+CREATE TABLE IF NOT EXISTS mqtt_topics (
+    topic       TEXT PRIMARY KEY,
+    first_seen  REAL,
+    last_seen   REAL,
+    messages    INTEGER,
+    last_value  TEXT,
+    publishers  TEXT
 );
 
 -- Per-minute traffic volume by application protocol, for dashboard charts.
@@ -150,6 +176,19 @@ class Storage:
             " VALUES (:key,:mac,:ips,:vendor,:name,:role,:first_seen,:last_seen,:packets_sent,:packets_recv,"
             ":bytes_sent,:bytes_recv,:protocols,:services,:peers,:connections,:status)",
             rows,
+        )
+
+    def mqtt(self, tracker: MqttTracker) -> None:
+        self.db.executemany(
+            "INSERT OR REPLACE INTO mqtt_clients (key, client_id, ip, broker, username, first_seen, last_seen,"
+            " connects, refused, messages, topics, subscriptions) VALUES (:key,:client_id,:ip,:broker,:username,"
+            ":first_seen,:last_seen,:connects,:refused,:messages,:topics,:subscriptions)",
+            [c.as_dict() for c in tracker.clients.values()],
+        )
+        self.db.executemany(
+            "INSERT OR REPLACE INTO mqtt_topics (topic, first_seen, last_seen, messages, last_value, publishers)"
+            " VALUES (:topic,:first_seen,:last_seen,:messages,:last_value,:publishers)",
+            [t.as_dict() for t in tracker.topics.values()],
         )
 
     def commit(self) -> None:

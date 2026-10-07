@@ -1,6 +1,7 @@
-"""Controlled attack actions for the Docker lab (Week 3 detection tests).
+"""Controlled attack actions for the Docker lab (Week 3 and 4 detection tests).
 
-Standard library only, so the file can be piped into any lab container:
+Standard library only (the Week 4 MQTT actions use paho-mqtt, which the lab
+device image already has), so the file can be piped into any lab container:
 
     docker exec -i iot-lab-temp-sensor-1 python - flood < lab/scenarios/attacks.py
 
@@ -75,7 +76,51 @@ def external() -> None:
             print(f"connect {OUTSIDE}:8883 -> errno {s.connect_ex((OUTSIDE, 8883))}")
 
 
-ACTIONS = {"hello": hello, "scan": scan, "flood": flood, "unusual-port": unusual_port, "external": external}
+def _mqtt(client_id: str):
+    import paho.mqtt.client as mqtt
+
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id)
+    client.username_pw_set("devices", "S3nsor!2026")  # lab-only credential (lab/broker/Dockerfile)
+    client.connect(BROKER, 1883, keepalive=60)
+    client.loop_start()
+    time.sleep(1)
+    return client
+
+
+def mqtt_new_client() -> None:
+    """DET-009: a workstation that never used MQTT connects to the broker and
+    subscribes to every topic, like a desktop MQTT explorer would."""
+    client, seen = _mqtt("mqtt-explorer-4f2a"), set()
+    client.on_message = lambda _c, _u, msg: seen.add(msg.topic)
+    client.subscribe("#")
+    time.sleep(6)
+    client.disconnect()
+    print(f"subscribed to '#' for 6 s, saw topics: {sorted(seen)}")
+
+
+def mqtt_burst() -> None:
+    """DET-009: the sensor publishes 10 readings per second for 15 s on its
+    usual topic (normally one every 5 s)."""
+    client = _mqtt("temp-sensor-01-diag")
+    for _ in range(150):
+        client.publish("factory/temperature", "24.6")
+        time.sleep(0.1)
+    client.disconnect()
+    print("published 150 messages to factory/temperature")
+
+
+def mqtt_spoof() -> None:
+    """DET-009: the sensor publishes a motor-speed value on the motor drive's
+    topic, a reading only the drive should ever send."""
+    client = _mqtt("temp-sensor-01-diag")
+    client.publish("factory/motor/rpm", "0").wait_for_publish()
+    time.sleep(1)
+    client.disconnect()
+    print("published factory/motor/rpm = 0")
+
+
+ACTIONS = {"hello": hello, "scan": scan, "flood": flood, "unusual-port": unusual_port, "external": external,
+           "mqtt-new-client": mqtt_new_client, "mqtt-burst": mqtt_burst, "mqtt-spoof": mqtt_spoof}
 
 if __name__ == "__main__":
     ACTIONS[sys.argv[1]]()

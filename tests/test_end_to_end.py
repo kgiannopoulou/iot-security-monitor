@@ -60,6 +60,7 @@ def test_every_attack_stage_is_detected(monitor):
         ("DET-002", "Port scan: 192.168.1.66 probed 15 ports on 192.168.1.22"),
         ("DET-004", "TELNET session 192.168.1.66 -> 192.168.1.22:23"),
         ("DET-007", "Repeated failed connections: 192.168.1.66 -> 192.168.1.21:23"),
+        ("DET-009", "New MQTT client: 192.168.1.66 connected to broker 192.168.1.10 as 'probe-0'"),
         ("DET-007", "MQTT authentication failures: 192.168.1.66"),
         ("DET-005", "Unexpected external connection: 192.168.1.22 -> 198.51.100.23:6667 (cnc.badbot.example)"),
         ("DET-004", "IRC session 192.168.1.22 -> 198.51.100.23:6667"),

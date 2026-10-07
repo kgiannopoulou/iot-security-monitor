@@ -1,6 +1,7 @@
 """Simulated IoT devices for the lab. One image, several roles:
 
     temp_sensor  publishes temperature telemetry over MQTT every 5 s
+    motor_drive  publishes line pressure and motor speed over MQTT every 2 s
     smart_plug   publishes power readings, listens for on/off commands,
                  checks in with its vendor cloud (DNS lookup + HTTP) every 60 s
     ip_camera    serves a web UI on :80, has Telnet open on :23 (a classic
@@ -76,9 +77,18 @@ def http(method: str, url: str, body: bytes | None = None) -> int:
 def temp_sensor() -> None:
     client = mqtt_client(os.environ.get("CLIENT_ID", "temp-sensor-01"))
     while True:
-        reading = {"c": round(21 + random.random() * 2, 2), "ts": int(time.time())}
-        client.publish("factory/line1/temp", json.dumps(reading))
+        client.publish("factory/temperature", f"{24 + random.random():.1f}")
         time.sleep(5)
+
+
+def motor_drive() -> None:
+    client = mqtt_client(os.environ.get("CLIENT_ID", "motor-drive-01"))
+    rpm = 1450
+    while True:
+        rpm = max(1400, min(1500, rpm + random.randint(-10, 10)))
+        client.publish("factory/pressure", f"{1.8 + random.uniform(-0.05, 0.05):.2f}")
+        client.publish("factory/motor/rpm", str(rpm))
+        time.sleep(2)
 
 
 def smart_plug() -> None:
@@ -181,7 +191,7 @@ def admin() -> None:
         http("GET", f"http://{CAMERA}/snapshot.jpg")
 
 
-ROLES = {"temp_sensor": temp_sensor, "smart_plug": smart_plug, "ip_camera": ip_camera,
+ROLES = {"temp_sensor": temp_sensor, "motor_drive": motor_drive, "smart_plug": smart_plug, "ip_camera": ip_camera,
          "cloud": cloud, "admin": admin}
 
 if __name__ == "__main__":

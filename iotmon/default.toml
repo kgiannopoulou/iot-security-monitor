@@ -21,7 +21,7 @@ idle_timeout_s = 60
 
 # Rule IDs: DET-001 new_device, DET-002 port_scan, DET-003 connection_rate,
 # DET-004 suspicious_port, DET-005 external_connection, DET-006 traffic_spike,
-# DET-007 failed_connections, DET-008 device_change.
+# DET-007 failed_connections, DET-008 device_change, DET-009 mqtt_activity.
 
 [detections.port_scan]
 enabled = true
@@ -57,6 +57,14 @@ dns_window_s = 600          # an address the device resolved this recently count
 fanout_window_s = 300
 fanout_threshold = 10       # distinct unexpected internet hosts -> one high fan-out alert
 host_alerts = 3             # per-host alerts per device and window before that
+cooldown_s = 600
+
+[detections.mqtt_activity]
+enabled = true
+window_s = 60
+min_messages = 30           # never a burst below this many publishes per window
+peak_factor = 5.0           # ... or below 5x the client's busiest baseline window
+topic_alerts = 3            # new-topic alerts per client per cooldown, so one rogue client cannot flood the queue
 cooldown_s = 600
 
 [detections.traffic_spike]

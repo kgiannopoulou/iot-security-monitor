@@ -20,12 +20,30 @@ TOP FLOWS (by bytes)
      192.168.1.22:50333 -> 203.0.113.80:443  TCP/HTTPS        22 pkts     21867 B  CLOSED
      192.168.1.22:49410 -> 203.0.113.80:443  TCP/HTTPS        22 pkts     21846 B  CLOSED
 
+MQTT CLIENTS
+  CLIENT ID                      HOST            BROKER          CONN REFUSED   MSGS  PUBLISHES TO / SUBSCRIBED TO
+  temp-sensor-01                 192.168.1.20    192.168.1.10       1       0     95  factory/line1/temp
+  smart-plug-01                  192.168.1.21    192.168.1.10       1       0     47  factory/line1/plug/power
+  probe-0                        192.168.1.66    192.168.1.10       1       1      0  -
+  probe-1                        192.168.1.66    192.168.1.10       1       1      0  -
+  probe-2                        192.168.1.66    192.168.1.10       1       1      0  -
+  probe-3                        192.168.1.66    192.168.1.10       1       1      0  -
+  probe-4                        192.168.1.66    192.168.1.10       1       1      0  -
+  probe-5                        192.168.1.66    192.168.1.10       1       1      0  -
+  probe-6                        192.168.1.66    192.168.1.10       1       1      0  -
+  probe-7                        192.168.1.66    192.168.1.10       1       1      0  -
+
+  TOPIC                            MESSAGES  LAST VALUE               PUBLISHERS
+  factory/line1/plug/power               47  {"w": 41.6, "on": true}  smart-plug-01
+  factory/line1/temp                     95  {"c": 21.60}             temp-sensor-01
+
 ALERTS
   2026-10-07 10:35:00  MEDIUM   DET-001  new_device          New IoT device detected: 192.168.1.66 (Raspberry Pi Foundation)
   2026-10-07 10:35:00  MEDIUM   DET-002  port_scan           ARP sweep from 192.168.1.66
   2026-10-07 10:35:10  HIGH     DET-002  port_scan           Port scan: 192.168.1.66 probed 15 ports on 192.168.1.22
   2026-10-07 10:35:30  HIGH     DET-004  suspicious_port     TELNET session 192.168.1.66 -> 192.168.1.22:23
   2026-10-07 10:35:52  MEDIUM   DET-007  failed_connections  Repeated failed connections: 192.168.1.66 -> 192.168.1.21:23 (10x)
+  2026-10-07 10:36:00  MEDIUM   DET-009  mqtt_activity       New MQTT client: 192.168.1.66 connected to broker 192.168.1.10 as 'probe-0'
   2026-10-07 10:36:06  HIGH     DET-007  failed_connections  MQTT authentication failures: 192.168.1.66 refused 5x by broker 192.168.1.10
   2026-10-07 10:36:35  MEDIUM   DET-005  external_connection Unexpected external connection: 192.168.1.22 -> 198.51.100.23:6667 (cnc.badbot.example)
   2026-10-07 10:36:35  CRITICAL DET-004  suspicious_port     IRC session 192.168.1.22 -> 198.51.100.23:6667

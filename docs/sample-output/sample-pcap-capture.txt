@@ -19,21 +19,21 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:30:03  192.168.1.10     192.168.1.21     TCP       1883  MQTT      CONNACK accepted
 10:30:04  192.168.1.22     192.168.1.1      UDP        123  NTP       client request
 10:30:04  192.168.1.1      192.168.1.22     UDP        123  NTP       server reply
-10:30:05  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:30:05  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.03}
 10:30:05  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:30:06  192.168.1.5      192.168.1.1      UDP        123  NTP       client request
 10:30:06  192.168.1.1      192.168.1.5      UDP        123  NTP       server reply
 10:30:07  192.168.1.5      192.168.1.22     ARP             ARP       who-has 192.168.1.22 tell 192.168.1.5
 10:30:07  192.168.1.22     192.168.1.5      ARP             ARP       192.168.1.22 is-at 44:19:b6:00:00:22
-10:30:10  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:30:10  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.53}
 10:30:10  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:30:13  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:30:13  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 40.2, "on": true}
 10:30:13  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
 10:30:15  192.168.1.21     192.168.1.1      UDP         53  DNS       query api.smartplug.example
 10:30:15  192.168.1.1      192.168.1.21     UDP         53  DNS       answer api.smartplug.example -> 203.0.113.50
 10:30:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     [S]
 10:30:15  203.0.113.50     192.168.1.21     TCP        443  HTTPS     [SA]
-10:30:15  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:30:15  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.53}
 10:30:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     [A]
 10:30:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     TLS record, 606 bytes (encrypted)
 10:30:15  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
@@ -63,19 +63,19 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:30:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [FA]
 10:30:20  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [FA]
 10:30:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [A]
-10:30:20  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:30:20  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.89}
 10:30:20  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:30:23  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:30:23  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 43.5, "on": true}
 10:30:23  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:30:25  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:30:25  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.01}
 10:30:25  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:30:30  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:30:30  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.35}
 10:30:30  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:30:30  192.168.1.1      192.168.1.20     ARP             ARP       who-has 192.168.1.20 tell 192.168.1.1
 10:30:30  192.168.1.20     192.168.1.1      ARP             ARP       192.168.1.20 is-at 24:0a:c4:00:00:20
-10:30:32  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:30:32  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 39.7, "on": true}
 10:30:32  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:30:35  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:30:35  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.42}
 10:30:35  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:30:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [S]
 10:30:40  192.168.1.22     192.168.1.5      TCP         80  HTTP      [SA]
@@ -91,11 +91,11 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:30:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [FA]
 10:30:40  192.168.1.22     192.168.1.5      TCP         80  HTTP      [FA]
 10:30:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [A]
-10:30:40  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:30:40  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.78}
 10:30:40  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:30:42  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:30:42  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 39.9, "on": true}
 10:30:42  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:30:45  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:30:45  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.53}
 10:30:45  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:30:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [S]
 10:30:50  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [SA]
@@ -119,21 +119,21 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:30:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [FA]
 10:30:50  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [FA]
 10:30:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [A]
-10:30:50  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:30:50  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.07}
 10:30:50  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:30:53  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:30:53  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 43.1, "on": true}
 10:30:53  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:30:55  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:30:55  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.69}
 10:30:55  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:31:00  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:31:00  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.30}
 10:31:00  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:31:02  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:31:02  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 38.4, "on": true}
 10:31:02  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:31:05  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:31:05  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.22}
 10:31:05  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:31:10  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:31:10  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.23}
 10:31:10  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:31:12  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:31:12  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 42.0, "on": true}
 10:31:12  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
 10:31:15  192.168.1.21     192.168.1.1      UDP         53  DNS       query api.smartplug.example
 10:31:15  192.168.1.1      192.168.1.21     UDP         53  DNS       answer api.smartplug.example -> 203.0.113.50
@@ -145,7 +145,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:31:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     [FA]
 10:31:15  203.0.113.50     192.168.1.21     TCP        443  HTTPS     [FA]
 10:31:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     [A]
-10:31:15  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:31:15  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.64}
 10:31:15  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:31:15  192.168.1.1      192.168.1.21     ARP             ARP       who-has 192.168.1.21 tell 192.168.1.1
 10:31:15  192.168.1.21     192.168.1.1      ARP             ARP       192.168.1.21 is-at 24:0a:c4:00:00:21
@@ -172,17 +172,17 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:31:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [FA]
 10:31:20  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [FA]
 10:31:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [A]
-10:31:20  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:31:20  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.94}
 10:31:20  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:31:22  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:31:22  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 38.8, "on": true}
 10:31:22  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:31:25  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:31:25  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.76}
 10:31:25  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:31:30  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:31:30  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.41}
 10:31:30  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:31:32  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:31:32  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 42.3, "on": true}
 10:31:33  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:31:35  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:31:35  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.87}
 10:31:35  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:31:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [S]
 10:31:40  192.168.1.22     192.168.1.5      TCP         80  HTTP      [SA]
@@ -198,11 +198,11 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:31:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [FA]
 10:31:40  192.168.1.22     192.168.1.5      TCP         80  HTTP      [FA]
 10:31:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [A]
-10:31:40  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:31:40  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.25}
 10:31:40  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:31:42  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:31:42  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 39.9, "on": true}
 10:31:42  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:31:45  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:31:45  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.20}
 10:31:45  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:31:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [S]
 10:31:50  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [SA]
@@ -227,23 +227,23 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:31:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [FA]
 10:31:50  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [FA]
 10:31:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [A]
-10:31:50  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:31:50  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.38}
 10:31:50  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:31:52  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:31:52  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 39.4, "on": true}
 10:31:52  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:31:55  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:31:55  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.97}
 10:31:55  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:32:00  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:32:00  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.46}
 10:32:00  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:32:00  192.168.1.1      192.168.1.22     ARP             ARP       who-has 192.168.1.22 tell 192.168.1.1
 10:32:00  192.168.1.22     192.168.1.1      ARP             ARP       192.168.1.22 is-at 44:19:b6:00:00:22
-10:32:02  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:32:02  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 43.0, "on": true}
 10:32:02  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:32:05  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:32:05  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.60}
 10:32:05  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:32:10  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:32:10  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.43}
 10:32:10  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:32:12  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:32:12  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 41.7, "on": true}
 10:32:12  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
 10:32:15  192.168.1.21     192.168.1.1      UDP         53  DNS       query api.smartplug.example
 10:32:15  192.168.1.1      192.168.1.21     UDP         53  DNS       answer api.smartplug.example -> 203.0.113.50
@@ -255,7 +255,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:32:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     [FA]
 10:32:15  203.0.113.50     192.168.1.21     TCP        443  HTTPS     [FA]
 10:32:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     [A]
-10:32:15  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:32:15  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.65}
 10:32:15  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:32:19  192.168.1.22     192.168.1.1      UDP         53  DNS       query upload.camcloud.example
 10:32:19  192.168.1.1      192.168.1.22     UDP         53  DNS       answer upload.camcloud.example -> 203.0.113.80
@@ -282,17 +282,17 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:32:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [FA]
 10:32:20  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [FA]
 10:32:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [A]
-10:32:20  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:32:20  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.73}
 10:32:20  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:32:23  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:32:23  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 40.3, "on": true}
 10:32:23  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:32:25  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:32:25  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.58}
 10:32:25  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:32:30  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:32:30  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.21}
 10:32:30  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:32:33  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:32:33  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 38.3, "on": true}
 10:32:33  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:32:35  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:32:35  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.14}
 10:32:35  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:32:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [S]
 10:32:40  192.168.1.22     192.168.1.5      TCP         80  HTTP      [SA]
@@ -308,11 +308,11 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:32:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [FA]
 10:32:40  192.168.1.22     192.168.1.5      TCP         80  HTTP      [FA]
 10:32:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [A]
-10:32:40  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:32:40  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.91}
 10:32:40  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:32:42  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:32:42  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 40.4, "on": true}
 10:32:43  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:32:45  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:32:45  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.70}
 10:32:45  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:32:45  192.168.1.1      192.168.1.21     ARP             ARP       who-has 192.168.1.21 tell 192.168.1.1
 10:32:45  192.168.1.21     192.168.1.1      ARP             ARP       192.168.1.21 is-at 24:0a:c4:00:00:21
@@ -339,21 +339,21 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:32:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [FA]
 10:32:50  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [FA]
 10:32:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [A]
-10:32:50  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:32:50  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.16}
 10:32:50  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:32:52  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:32:52  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 39.4, "on": true}
 10:32:52  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:32:55  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:32:55  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.95}
 10:32:55  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:33:00  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:33:00  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.82}
 10:33:00  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:33:02  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:33:02  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 40.0, "on": true}
 10:33:02  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:33:05  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:33:05  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.00}
 10:33:05  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:33:10  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:33:10  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.79}
 10:33:10  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:33:13  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:33:13  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 41.4, "on": true}
 10:33:13  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
 10:33:15  192.168.1.21     192.168.1.1      UDP         53  DNS       query api.smartplug.example
 10:33:15  192.168.1.1      192.168.1.21     UDP         53  DNS       answer api.smartplug.example -> 203.0.113.50
@@ -365,7 +365,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:33:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     [FA]
 10:33:15  203.0.113.50     192.168.1.21     TCP        443  HTTPS     [FA]
 10:33:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     [A]
-10:33:15  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:33:15  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.29}
 10:33:15  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:33:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [S]
 10:33:20  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [SA]
@@ -389,19 +389,19 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:33:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [FA]
 10:33:20  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [FA]
 10:33:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [A]
-10:33:20  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:33:20  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.48}
 10:33:20  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:33:23  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:33:23  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 41.9, "on": true}
 10:33:23  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:33:25  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:33:25  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.14}
 10:33:25  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:33:30  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:33:30  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.58}
 10:33:30  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:33:30  192.168.1.1      192.168.1.21     ARP             ARP       who-has 192.168.1.21 tell 192.168.1.1
 10:33:30  192.168.1.21     192.168.1.1      ARP             ARP       192.168.1.21 is-at 24:0a:c4:00:00:21
-10:33:33  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:33:33  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 40.4, "on": true}
 10:33:33  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:33:35  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:33:35  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.63}
 10:33:35  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:33:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [S]
 10:33:40  192.168.1.22     192.168.1.5      TCP         80  HTTP      [SA]
@@ -417,11 +417,11 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:33:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [FA]
 10:33:40  192.168.1.22     192.168.1.5      TCP         80  HTTP      [FA]
 10:33:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [A]
-10:33:40  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:33:40  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.70}
 10:33:40  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:33:43  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:33:43  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 41.5, "on": true}
 10:33:43  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:33:45  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:33:45  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 23.00}
 10:33:45  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:33:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [S]
 10:33:50  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [SA]
@@ -445,21 +445,21 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:33:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [FA]
 10:33:50  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [FA]
 10:33:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [A]
-10:33:50  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:33:50  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.75}
 10:33:50  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:33:52  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:33:52  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 40.8, "on": true}
 10:33:52  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:33:55  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:33:55  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.55}
 10:33:55  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:34:00  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:34:00  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.68}
 10:34:00  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:34:02  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:34:02  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 40.1, "on": true}
 10:34:02  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:34:05  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:34:05  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.33}
 10:34:05  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:34:10  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:34:10  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.99}
 10:34:10  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:34:12  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:34:12  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 42.3, "on": true}
 10:34:12  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
 10:34:15  192.168.1.21     192.168.1.1      UDP         53  DNS       query api.smartplug.example
 10:34:15  192.168.1.1      192.168.1.21     UDP         53  DNS       answer api.smartplug.example -> 203.0.113.50
@@ -468,7 +468,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:34:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     [A]
 10:34:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     TLS record, 601 bytes (encrypted)
 10:34:15  203.0.113.50     192.168.1.21     TCP        443  HTTPS     TLS record, 37 bytes (encrypted)
-10:34:15  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:34:15  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.27}
 10:34:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     [FA]
 10:34:15  203.0.113.50     192.168.1.21     TCP        443  HTTPS     [FA]
 10:34:15  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
@@ -499,17 +499,17 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:34:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [FA]
 10:34:20  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [FA]
 10:34:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [A]
-10:34:20  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:34:20  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.14}
 10:34:20  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:34:22  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:34:22  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 40.5, "on": true}
 10:34:22  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:34:25  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:34:25  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.32}
 10:34:25  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:34:30  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:34:30  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.93}
 10:34:30  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:34:33  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:34:33  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 43.6, "on": true}
 10:34:33  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:34:35  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:34:35  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.65}
 10:34:35  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:34:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [S]
 10:34:40  192.168.1.22     192.168.1.5      TCP         80  HTTP      [SA]
@@ -525,11 +525,11 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:34:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [FA]
 10:34:40  192.168.1.22     192.168.1.5      TCP         80  HTTP      [FA]
 10:34:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [A]
-10:34:40  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:34:40  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.18}
 10:34:40  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:34:42  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:34:42  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 40.0, "on": true}
 10:34:42  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:34:45  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:34:45  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.03}
 10:34:45  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:34:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [S]
 10:34:50  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [SA]
@@ -553,11 +553,11 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:34:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [FA]
 10:34:50  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [FA]
 10:34:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [A]
-10:34:50  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:34:50  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.76}
 10:34:50  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:34:53  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:34:53  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 41.7, "on": true}
 10:34:53  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:34:55  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:34:55  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.70}
 10:34:55  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:35:00  192.168.1.66     192.168.1.1      ARP             ARP       who-has 192.168.1.1 tell 192.168.1.66
 10:35:00  [ALERT MEDIUM] DET-001 new_device: New IoT device detected: 192.168.1.66 (Raspberry Pi Foundation)
@@ -567,7 +567,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
           First packet:  who-has 192.168.1.1 tell 192.168.1.66
 10:35:00  192.168.1.1      192.168.1.66     ARP             ARP       192.168.1.1 is-at 50:c7:bf:00:00:01
 10:35:00  192.168.1.66     192.168.1.2      ARP             ARP       who-has 192.168.1.2 tell 192.168.1.66
-10:35:00  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:35:00  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.50}
 10:35:00  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:35:00  192.168.1.66     192.168.1.3      ARP             ARP       who-has 192.168.1.3 tell 192.168.1.66
 10:35:00  192.168.1.66     192.168.1.4      ARP             ARP       who-has 192.168.1.4 tell 192.168.1.66
@@ -605,9 +605,9 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:35:01  192.168.1.66     192.168.1.28     ARP             ARP       who-has 192.168.1.28 tell 192.168.1.66
 10:35:01  192.168.1.66     192.168.1.29     ARP             ARP       who-has 192.168.1.29 tell 192.168.1.66
 10:35:01  192.168.1.66     192.168.1.30     ARP             ARP       who-has 192.168.1.30 tell 192.168.1.66
-10:35:03  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:35:03  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 40.0, "on": true}
 10:35:03  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:35:05  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:35:05  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.53}
 10:35:05  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:35:10  192.168.1.66     192.168.1.22     TCP         21  FTP       [S]
 10:35:10  192.168.1.22     192.168.1.66     TCP         21  FTP       [RA]
@@ -623,7 +623,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:35:10  192.168.1.66     192.168.1.22     TCP         80  HTTP      [S]
 10:35:10  192.168.1.22     192.168.1.66     TCP         80  HTTP      [SA]
 10:35:10  192.168.1.66     192.168.1.22     TCP         80  HTTP      [R]
-10:35:10  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:35:10  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.64}
 10:35:10  192.168.1.66     192.168.1.22     TCP         81            [S]
 10:35:10  192.168.1.22     192.168.1.66     TCP         81            [RA]
 10:35:10  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
@@ -694,7 +694,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:35:10  192.168.1.22     192.168.1.66     TCP       9100            [RA]
 10:35:10  192.168.1.66     192.168.1.22     TCP      37777            [S]
 10:35:10  192.168.1.22     192.168.1.66     TCP      37777            [RA]
-10:35:13  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:35:13  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 42.5, "on": true}
 10:35:13  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
 10:35:15  192.168.1.21     192.168.1.1      UDP         53  DNS       query api.smartplug.example
 10:35:15  192.168.1.1      192.168.1.21     UDP         53  DNS       answer api.smartplug.example -> 203.0.113.50
@@ -706,7 +706,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:35:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     [FA]
 10:35:15  203.0.113.50     192.168.1.21     TCP        443  HTTPS     [FA]
 10:35:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     [A]
-10:35:15  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:35:15  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.64}
 10:35:15  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:35:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [S]
 10:35:20  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [SA]
@@ -730,11 +730,11 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:35:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [FA]
 10:35:20  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [FA]
 10:35:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [A]
-10:35:20  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:35:20  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.75}
 10:35:20  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:35:22  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:35:22  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 39.2, "on": true}
 10:35:22  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:35:25  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:35:25  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.52}
 10:35:25  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:35:30  192.168.1.66     192.168.1.22     TCP         23  TELNET    [S]
 10:35:30  192.168.1.22     192.168.1.66     TCP         23  TELNET    [SA]
@@ -749,7 +749,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:35:30  192.168.1.66     192.168.1.22     TCP         23  TELNET    [FA]
 10:35:30  192.168.1.22     192.168.1.66     TCP         23  TELNET    [FA]
 10:35:30  192.168.1.66     192.168.1.22     TCP         23  TELNET    [A]
-10:35:30  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:35:30  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.73}
 10:35:30  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:35:32  192.168.1.66     192.168.1.22     TCP         23  TELNET    [S]
 10:35:32  192.168.1.22     192.168.1.66     TCP         23  TELNET    [SA]
@@ -762,7 +762,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:35:32  192.168.1.66     192.168.1.22     TCP         23  TELNET    [FA]
 10:35:32  192.168.1.22     192.168.1.66     TCP         23  TELNET    [FA]
 10:35:32  192.168.1.66     192.168.1.22     TCP         23  TELNET    [A]
-10:35:33  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:35:33  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 42.6, "on": true}
 10:35:33  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
 10:35:34  192.168.1.66     192.168.1.22     TCP         23  TELNET    [S]
 10:35:34  192.168.1.22     192.168.1.66     TCP         23  TELNET    [SA]
@@ -775,7 +775,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:35:34  192.168.1.66     192.168.1.22     TCP         23  TELNET    [FA]
 10:35:34  192.168.1.22     192.168.1.66     TCP         23  TELNET    [FA]
 10:35:34  192.168.1.66     192.168.1.22     TCP         23  TELNET    [A]
-10:35:35  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:35:35  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.17}
 10:35:35  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:35:36  192.168.1.66     192.168.1.22     TCP         23  TELNET    [S]
 10:35:36  192.168.1.22     192.168.1.66     TCP         23  TELNET    [SA]
@@ -802,13 +802,13 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:35:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [FA]
 10:35:40  192.168.1.22     192.168.1.5      TCP         80  HTTP      [FA]
 10:35:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [A]
-10:35:40  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:35:40  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.58}
 10:35:40  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:35:43  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:35:43  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 38.4, "on": true}
 10:35:43  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
 10:35:45  192.168.1.66     192.168.1.21     TCP         23  TELNET    [S]
 10:35:45  192.168.1.21     192.168.1.66     TCP         23  TELNET    [RA]
-10:35:45  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:35:45  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.90}
 10:35:45  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:35:45  192.168.1.1      192.168.1.21     ARP             ARP       who-has 192.168.1.21 tell 192.168.1.1
 10:35:45  192.168.1.21     192.168.1.1      ARP             ARP       192.168.1.21 is-at 24:0a:c4:00:00:21
@@ -847,7 +847,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:35:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [FA]
 10:35:50  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [FA]
 10:35:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [A]
-10:35:50  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:35:50  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.69}
 10:35:50  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:35:50  192.168.1.66     192.168.1.21     TCP         23  TELNET    [S]
 10:35:50  192.168.1.21     192.168.1.66     TCP         23  TELNET    [RA]
@@ -858,21 +858,24 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:35:52  [ALERT MEDIUM] DET-007 failed_connections: Repeated failed connections: 192.168.1.66 -> 192.168.1.21:23 (10x)
 10:35:53  192.168.1.66     192.168.1.21     TCP         23  TELNET    [S]
 10:35:53  192.168.1.21     192.168.1.66     TCP         23  TELNET    [RA]
-10:35:53  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:35:53  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 40.9, "on": true}
 10:35:53  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
 10:35:53  192.168.1.66     192.168.1.21     TCP         23  TELNET    [S]
 10:35:53  192.168.1.21     192.168.1.66     TCP         23  TELNET    [RA]
-10:35:55  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:35:55  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.29}
 10:35:55  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:36:00  192.168.1.66     192.168.1.10     TCP       1883  MQTT      [S]
 10:36:00  192.168.1.10     192.168.1.66     TCP       1883  MQTT      [SA]
 10:36:00  192.168.1.66     192.168.1.10     TCP       1883  MQTT      [A]
 10:36:00  192.168.1.66     192.168.1.10     TCP       1883  MQTT      CONNECT id=probe-0 user=devices
+10:36:00  [ALERT MEDIUM] DET-009 mqtt_activity: New MQTT client: 192.168.1.66 connected to broker 192.168.1.10 as 'probe-0'
+          Client:        probe-0
+          Why:           host never used MQTT during the baseline
 10:36:00  192.168.1.10     192.168.1.66     TCP       1883  MQTT      CONNACK not authorized
 10:36:00  192.168.1.66     192.168.1.10     TCP       1883  MQTT      [FA]
 10:36:00  192.168.1.10     192.168.1.66     TCP       1883  MQTT      [FA]
 10:36:00  192.168.1.66     192.168.1.10     TCP       1883  MQTT      [A]
-10:36:00  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:36:00  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.27}
 10:36:00  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:36:01  192.168.1.66     192.168.1.10     TCP       1883  MQTT      [S]
 10:36:01  192.168.1.10     192.168.1.66     TCP       1883  MQTT      [SA]
@@ -890,7 +893,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:36:03  192.168.1.66     192.168.1.10     TCP       1883  MQTT      [FA]
 10:36:03  192.168.1.10     192.168.1.66     TCP       1883  MQTT      [FA]
 10:36:03  192.168.1.66     192.168.1.10     TCP       1883  MQTT      [A]
-10:36:03  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:36:03  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 38.5, "on": true}
 10:36:03  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
 10:36:04  192.168.1.66     192.168.1.10     TCP       1883  MQTT      [S]
 10:36:04  192.168.1.10     192.168.1.66     TCP       1883  MQTT      [SA]
@@ -900,7 +903,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:36:04  192.168.1.66     192.168.1.10     TCP       1883  MQTT      [FA]
 10:36:04  192.168.1.10     192.168.1.66     TCP       1883  MQTT      [FA]
 10:36:04  192.168.1.66     192.168.1.10     TCP       1883  MQTT      [A]
-10:36:05  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:36:05  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.59}
 10:36:05  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:36:06  192.168.1.66     192.168.1.10     TCP       1883  MQTT      [S]
 10:36:06  192.168.1.10     192.168.1.66     TCP       1883  MQTT      [SA]
@@ -927,7 +930,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:36:09  192.168.1.66     192.168.1.10     TCP       1883  MQTT      [FA]
 10:36:09  192.168.1.10     192.168.1.66     TCP       1883  MQTT      [FA]
 10:36:09  192.168.1.66     192.168.1.10     TCP       1883  MQTT      [A]
-10:36:10  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:36:10  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.43}
 10:36:10  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:36:10  192.168.1.66     192.168.1.10     TCP       1883  MQTT      [S]
 10:36:10  192.168.1.10     192.168.1.66     TCP       1883  MQTT      [SA]
@@ -937,7 +940,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:36:10  192.168.1.66     192.168.1.10     TCP       1883  MQTT      [FA]
 10:36:10  192.168.1.10     192.168.1.66     TCP       1883  MQTT      [FA]
 10:36:10  192.168.1.66     192.168.1.10     TCP       1883  MQTT      [A]
-10:36:12  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:36:12  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 40.7, "on": true}
 10:36:12  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
 10:36:15  192.168.1.21     192.168.1.1      UDP         53  DNS       query api.smartplug.example
 10:36:15  192.168.1.1      192.168.1.21     UDP         53  DNS       answer api.smartplug.example -> 203.0.113.50
@@ -949,7 +952,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:36:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     [FA]
 10:36:15  203.0.113.50     192.168.1.21     TCP        443  HTTPS     [FA]
 10:36:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     [A]
-10:36:15  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:36:15  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.89}
 10:36:15  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:36:19  192.168.1.22     192.168.1.1      UDP         53  DNS       query upload.camcloud.example
 10:36:19  192.168.1.1      192.168.1.22     UDP         53  DNS       answer upload.camcloud.example -> 203.0.113.80
@@ -973,17 +976,17 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:36:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [FA]
 10:36:20  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [FA]
 10:36:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [A]
-10:36:20  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:36:20  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.24}
 10:36:20  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:36:22  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:36:22  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 42.0, "on": true}
 10:36:22  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:36:25  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:36:25  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.79}
 10:36:25  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:36:30  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:36:30  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.63}
 10:36:30  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:36:30  192.168.1.1      192.168.1.22     ARP             ARP       who-has 192.168.1.22 tell 192.168.1.1
 10:36:30  192.168.1.22     192.168.1.1      ARP             ARP       192.168.1.22 is-at 44:19:b6:00:00:22
-10:36:32  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:36:32  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 38.7, "on": true}
 10:36:32  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
 10:36:34  192.168.1.22     192.168.1.1      UDP         53  DNS       query cnc.badbot.example
 10:36:34  192.168.1.1      192.168.1.22     UDP         53  DNS       answer cnc.badbot.example -> 198.51.100.23
@@ -999,7 +1002,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:36:35  198.51.100.23    192.168.1.22     TCP       6667  IRC       [PA]
 10:36:35  192.168.1.22     198.51.100.23    TCP       6667  IRC       [PA]
 10:36:35  198.51.100.23    192.168.1.22     TCP       6667  IRC       [PA]
-10:36:35  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:36:35  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.86}
 10:36:35  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:36:40  192.168.1.22     198.51.100.77    UDP         53  DNS       query ?
 10:36:40  [ALERT HIGH] DET-005 external_connection: Unexpected external connection: 192.168.1.22 -> 198.51.100.77:53
@@ -1050,7 +1053,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:36:40  192.168.1.22     198.51.100.77    UDP        123  NTP       mode 0
 10:36:40  192.168.1.22     198.51.100.77    UDP         80  HTTP      
 10:36:40  192.168.1.22     198.51.100.77    UDP         80  HTTP      
-10:36:40  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:36:40  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.99}
 10:36:40  192.168.1.22     198.51.100.77    UDP        123  NTP       mode 0
 10:36:40  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:36:40  192.168.1.22     198.51.100.77    UDP         80  HTTP      
@@ -1955,7 +1958,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:36:43  192.168.1.22     198.51.100.77    UDP        123  NTP       mode 0
 10:36:43  192.168.1.22     198.51.100.77    UDP         53  DNS       query ?
 10:36:43  192.168.1.22     198.51.100.77    UDP         80  HTTP      
-10:36:43  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:36:43  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 43.9, "on": true}
 10:36:43  192.168.1.22     198.51.100.77    UDP         80  HTTP      
 10:36:43  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
 10:36:43  192.168.1.22     198.51.100.77    UDP        443  HTTPS     
@@ -2575,7 +2578,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:36:45  192.168.1.22     198.51.100.77    UDP        443  HTTPS     
 10:36:45  192.168.1.22     198.51.100.77    UDP        443  HTTPS     
 10:36:45  192.168.1.22     198.51.100.77    UDP        443  HTTPS     
-10:36:45  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:36:45  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.46}
 10:36:45  192.168.1.22     198.51.100.77    UDP        123  NTP       mode 0
 10:36:45  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:36:45  192.168.1.22     198.51.100.77    UDP         53  DNS       query ?
@@ -3456,21 +3459,21 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:36:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [FA]
 10:36:50  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [FA]
 10:36:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [A]
-10:36:50  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:36:50  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.38}
 10:36:50  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:36:52  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:36:52  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 43.0, "on": true}
 10:36:52  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:36:55  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:36:55  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.38}
 10:36:55  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:37:00  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:37:00  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.64}
 10:37:00  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:37:02  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:37:02  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 41.1, "on": true}
 10:37:02  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:37:05  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:37:05  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.75}
 10:37:05  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:37:10  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:37:10  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.72}
 10:37:10  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:37:13  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:37:13  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 42.2, "on": true}
 10:37:13  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
 10:37:15  192.168.1.21     192.168.1.1      UDP         53  DNS       query api.smartplug.example
 10:37:15  192.168.1.1      192.168.1.21     UDP         53  DNS       answer api.smartplug.example -> 203.0.113.50
@@ -3482,7 +3485,7 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:37:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     [FA]
 10:37:15  203.0.113.50     192.168.1.21     TCP        443  HTTPS     [FA]
 10:37:15  192.168.1.21     203.0.113.50     TCP        443  HTTPS     [A]
-10:37:15  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:37:15  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 23.00}
 10:37:15  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:37:15  192.168.1.1      192.168.1.22     ARP             ARP       who-has 192.168.1.22 tell 192.168.1.1
 10:37:15  192.168.1.22     192.168.1.1      ARP             ARP       192.168.1.22 is-at 44:19:b6:00:00:22
@@ -3509,17 +3512,17 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:37:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [FA]
 10:37:20  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [FA]
 10:37:20  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [A]
-10:37:20  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:37:20  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.86}
 10:37:20  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:37:22  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:37:22  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 40.7, "on": true}
 10:37:22  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:37:25  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:37:25  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.44}
 10:37:25  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:37:30  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:37:30  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.36}
 10:37:30  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:37:33  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:37:33  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 41.5, "on": true}
 10:37:33  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:37:35  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:37:35  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.47}
 10:37:35  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:37:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [S]
 10:37:40  192.168.1.22     192.168.1.5      TCP         80  HTTP      [SA]
@@ -3535,11 +3538,11 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:37:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [FA]
 10:37:40  192.168.1.22     192.168.1.5      TCP         80  HTTP      [FA]
 10:37:40  192.168.1.5      192.168.1.22     TCP         80  HTTP      [A]
-10:37:40  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:37:40  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.90}
 10:37:40  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:37:42  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:37:42  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 42.5, "on": true}
 10:37:42  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:37:45  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:37:45  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 22.26}
 10:37:45  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:37:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [S]
 10:37:50  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [SA]
@@ -3564,9 +3567,9 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:37:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [FA]
 10:37:50  203.0.113.80     192.168.1.22     TCP        443  HTTPS     [FA]
 10:37:50  192.168.1.22     203.0.113.80     TCP        443  HTTPS     [A]
-10:37:50  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:37:50  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.37}
 10:37:50  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
-10:37:53  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power
+10:37:53  192.168.1.21     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/plug/power = {"w": 41.6, "on": true}
 10:37:53  192.168.1.10     192.168.1.21     TCP       1883  MQTT      [A]
-10:37:55  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
+10:37:55  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp = {"c": 21.60}
 10:37:55  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]

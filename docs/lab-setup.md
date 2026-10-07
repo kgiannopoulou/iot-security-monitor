@@ -116,7 +116,26 @@ SQLite's WAL shared memory does not work across the Docker Desktop file-share
 boundary, so a host-side connection can checkpoint away the containers' WAL.
 Query it through the dashboard API or `docker compose exec dashboard` instead.
 
-## Detection scenarios (Week 3)
+## MQTT telemetry (Week 4)
+
+The simulated devices publish harmless telemetry to the Mosquitto broker:
+
+| Device | Client ID | Topic | Example value | Every |
+|---|---|---|---|---|
+| `temp-sensor` (172.28.0.20) | `temp-sensor-01` | `factory/temperature` | `24.6` | 5 s |
+| `motor-drive` (172.28.0.23, Siemens OUI) | `motor-drive-01` | `factory/pressure`, `factory/motor/rpm` | `1.8`, `1450` | 2 s |
+| `smart-plug` (172.28.0.21) | `smart-plug-01` | `factory/line1/plug/power` (subscribes to `.../cmd`) | `{"w": 41.2, "on": true}` | 10 s |
+
+See what the monitor sees at the protocol level (run inside the container,
+for the WAL reason above):
+
+```bash
+docker compose exec dashboard python -m iotmon mqtt --db /data/iotmon.db
+```
+
+Or open the MQTT clients and topics tables on the dashboard.
+
+## Detection scenarios (Week 3 and 4)
 
 The monitor also runs with `--baseline /data/baseline.json` and the lab's
 own config, [`lab/monitor.toml`](../lab/monitor.toml). On a fresh start it
@@ -125,7 +144,7 @@ to `data/lab/baseline.json`. Once that file exists, run the controlled
 scenarios:
 
 ```bash
-python tools/lab_scenarios.py                                   # all five, about a minute
+python tools/lab_scenarios.py                                   # all eight, about two minutes
 python tools/lab_scenarios.py --only det-003-connection-flood   # one
 ```
 
@@ -136,6 +155,9 @@ python tools/lab_scenarios.py --only det-003-connection-flood   # one
 | `det-003-connection-flood` | `temp-sensor` (compromised) | 30 broker connections in about 10 s | DET-003 |
 | `det-004-unusual-port` | `temp-sensor` | camera web UI, then camera Telnet | DET-004 |
 | `det-005-external-connection` | `temp-sensor` | TCP to 198.51.100.23:8883 with **TTL 1** | DET-005 |
+| `det-009-new-mqtt-client` | `admin` | MQTT client `mqtt-explorer-4f2a` subscribes to `#` for 6 s | DET-004, DET-009 |
+| `det-009-message-burst` | `temp-sensor` | 150 publishes to `factory/temperature` in 15 s | DET-009 |
+| `det-009-topic-spoofing` | `temp-sensor` | publishes `factory/motor/rpm = 0` (the motor drive's topic) | DET-009 |
 
 The attack code is [`lab/scenarios/attacks.py`](../lab/scenarios/attacks.py)
 (standard library only, piped into the containers). Every target is a lab

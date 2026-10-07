@@ -23,6 +23,9 @@ $ python -m iotmon read samples/iot-lab.pcap -q --utc --baseline
 10:35:30  [ALERT HIGH] DET-004 suspicious_port: TELNET session 192.168.1.66 -> 192.168.1.22:23
           Why:           high-risk service; 192.168.1.22 never answered on port 23 during the baseline
 10:35:52  [ALERT MEDIUM] DET-007 failed_connections: Repeated failed connections: 192.168.1.66 -> 192.168.1.21:23 (10x)
+10:36:00  [ALERT MEDIUM] DET-009 mqtt_activity: New MQTT client: 192.168.1.66 connected to broker 192.168.1.10 as 'probe-0'
+          Client:        probe-0
+          Why:           host never used MQTT during the baseline
 10:36:06  [ALERT HIGH] DET-007 failed_connections: MQTT authentication failures: 192.168.1.66 refused 5x by broker 192.168.1.10
 10:36:35  [ALERT MEDIUM] DET-005 external_connection: Unexpected external connection: 192.168.1.22 -> 198.51.100.23:6667 (cnc.badbot.example)
           Why:           destination is not one of the device's usual external peers
@@ -39,8 +42,8 @@ $ python -m iotmon read samples/iot-lab.pcap -q --utc --baseline
           Top targets:   198.51.100.77:53 x5; 198.51.100.77:443 x4; 198.51.100.77:80 x3; 198.51.100.77:123 x3; 203.0.113.80:443 x2
 10:36:50  [ALERT HIGH] DET-006 traffic_spike: Traffic spike: 192.168.1.22 sent 591,031 bytes in 10s (baseline 9,027)
 
-3546 packets, 7 devices, 11 alerts
-alerts by severity: medium=5, high=5, critical=1
+3546 packets, 7 devices, 12 alerts
+alerts by severity: medium=6, high=5, critical=1
 baseline data/baseline.json: compared with, 6 device profiles
 
 $ python tools/run_scenarios.py
@@ -50,8 +53,11 @@ det-002-port-scan              DET-002              DET-002                   1 
 det-003-connection-flood       DET-003              DET-003                   1  PASS
 det-004-unusual-port           DET-004              DET-004                   2  PASS
 det-005-external-connection    DET-005              DET-005                   2  PASS
+det-009-new-mqtt-client        DET-004, DET-009     DET-004, DET-009          3  PASS
+det-009-message-burst          DET-009              DET-009                   1  PASS
+det-009-topic-spoofing         DET-009              DET-009                   1  PASS
 near-miss-below-thresholds     none                 none                      0  PASS
-iot-lab (full kill chain)      DET-001..007         DET-001..007             11  PASS
+iot-lab (full kill chain)      DET-001..007, 009    DET-001..007, 009        12  PASS
 
 == det-001-new-device: Unknown Raspberry Pi joins the network (ARP, NTP, DNS)
    10:33:00  DET-001  MEDIUM   New IoT device detected: 192.168.1.66 (Raspberry Pi Foundation)
@@ -70,6 +76,17 @@ iot-lab (full kill chain)      DET-001..007         DET-001..007             11 
    10:33:00  DET-005  HIGH     Unexpected external connection: 192.168.1.20 -> 198.51.100.23:8883
    10:33:10  DET-005  MEDIUM   Unexpected external connection: 192.168.1.21 -> 203.0.113.99:443 (fw.unknown-cdn.example)
 
+== det-009-new-mqtt-client: Admin laptop (never used MQTT) connects to the broker and subscribes to '#'
+   10:33:00  DET-004  MEDIUM   Unusual port: 192.168.1.5 -> 192.168.1.10:1883 (MQTT), outside the baseline
+   10:33:00  DET-009  MEDIUM   New MQTT client: 192.168.1.5 connected to broker 192.168.1.10 as 'mqtt-explorer-4f2a'
+   10:33:00  DET-009  MEDIUM   Broad MQTT subscription: 192.168.1.5 subscribed to '#' (every topic)
+
+== det-009-message-burst: Sensor publishes 10 messages/s for 20 s on its usual topic and session
+   10:33:05  DET-009  MEDIUM   MQTT message burst: 192.168.1.20 published 65 messages in 60s (baseline peak 13)
+
+== det-009-topic-spoofing: Sensor publishes on the smart plug's power topic
+   10:33:00  DET-009  HIGH     MQTT topic spoofing: 192.168.1.20 published to 'factory/line1/plug/power', normally published only by 192.168.1.21
+
 == near-miss-below-thresholds: 12-port probe, 12 reconnects/min, extra cloud check-in: all under threshold
    (no alerts)
 
@@ -79,6 +96,7 @@ iot-lab (full kill chain)      DET-001..007         DET-001..007             11 
    10:35:10  DET-002  HIGH     Port scan: 192.168.1.66 probed 15 ports on 192.168.1.22
    10:35:30  DET-004  HIGH     TELNET session 192.168.1.66 -> 192.168.1.22:23
    10:35:52  DET-007  MEDIUM   Repeated failed connections: 192.168.1.66 -> 192.168.1.21:23 (10x)
+   10:36:00  DET-009  MEDIUM   New MQTT client: 192.168.1.66 connected to broker 192.168.1.10 as 'probe-0'
    10:36:06  DET-007  HIGH     MQTT authentication failures: 192.168.1.66 refused 5x by broker 192.168.1.10
    10:36:35  DET-005  MEDIUM   Unexpected external connection: 192.168.1.22 -> 198.51.100.23:6667 (cnc.badbot.example)
    10:36:35  DET-004  CRITICAL IRC session 192.168.1.22 -> 198.51.100.23:6667
@@ -86,4 +104,4 @@ iot-lab (full kill chain)      DET-001..007         DET-001..007             11 
    10:36:40  DET-003  MEDIUM   Abnormal connection rate: 192.168.1.22 opened 20 connections in 60s (baseline peak 4)
    10:36:50  DET-006  HIGH     Traffic spike: 192.168.1.22 sent 591,031 bytes in 10s (baseline 9,027)
 
-7/7 scenarios passed
+10/10 scenarios passed

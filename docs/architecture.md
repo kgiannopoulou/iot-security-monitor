@@ -3,7 +3,7 @@
 ```
   pcap file ──┐                      ┌──▶ Inventory   (devices: MAC, vendor, role, connections) ◀─▶ inventory.json
               ├─▶ capture ─▶ parser ─┼──▶ FlowTable   (bidirectional conversations)
-  interface ──┘   (scapy)  (Packet-  ├──▶ Detection   (DET-001..008, packet-time windows) ──▶ alerts
+  interface ──┘   (scapy)  (Packet-  ├──▶ Detection   (DET-001..009, packet-time windows) ──▶ alerts
                             Record)  │      Engine  ◀─▶ Baseline (per-device behaviour) ◀─▶ baseline.json
                                      └──▶ Printer     (terminal table + coloured alerts)
                                                 │
@@ -25,11 +25,12 @@
 | `inventory.py` | Passive asset inventory: MAC-keyed devices, OUI vendor lookup, role inference from offered services and MQTT behaviour, connection counts, MAC/IP binding changes. |
 | `assets.py` | Persistent asset register (`data/inventory.json`): known devices keyed by MAC with status approved / pending, merged after each run (replay-safe), saved every 30 s during live capture. See [Week 2](02-device-inventory.md). |
 | `baseline.py` | Behavioural baseline (`data/baseline.json`): per device, the ports it uses and serves, its internet peers and its peak connection rate. Learned during the learning period or from a trusted capture, then frozen. See [Week 3](03-detection-engine.md). |
-| `detections.py` | `DetectionEngine` plus eight `Detector` subclasses (DET-001 to DET-008). The engine tells each detector whether the packet opened a connection and whether the baseline is still learning, and remembers which rules fired for which source. See [detection-rules.md](detection-rules.md). |
+| `mqtt.py` | MQTT tracker: maps MQTT packets to client IDs and brokers, keeps per-client and per-topic statistics (messages, last value, publishers, subscriptions) and emits connect/publish/subscribe events for DET-009. See [Week 4](04-iot-protocols.md). |
+| `detections.py` | `DetectionEngine` plus nine `Detector` subclasses (DET-001 to DET-009). The engine tells each detector whether the packet opened a connection and whether the baseline is still learning, and remembers which rules fired for which source. See [detection-rules.md](detection-rules.md). |
 | `storage.py` | SQLite in WAL mode (writer and dashboard reader coexist), JSONL alerts for SIEM ingestion, optional CSV. Writes are batched and committed every 2 s. |
 | `pipeline.py` | `Monitor`: wires the stages together and flushes state on exit. |
-| `dashboard/` | Flask app plus one HTML page. JSON API (`/api/summary`, `/api/alerts`, `/api/devices`, `/api/traffic`, `/api/flows`); the page polls it every 5 s. |
-| `cli.py` | `read`, `live`, `report`, `inventory` (learn / show / approve), `baseline` (learn / show), `dashboard` sub-commands. |
+| `dashboard/` | Flask app plus one HTML page. JSON API (`/api/summary`, `/api/alerts`, `/api/devices`, `/api/traffic`, `/api/flows`, `/api/mqtt`); the page polls it every 5 s. |
+| `cli.py` | `read`, `live`, `report`, `mqtt`, `inventory` (learn / show / approve), `baseline` (learn / show), `dashboard` sub-commands. |
 
 ## Key decisions
 
@@ -61,6 +62,8 @@ ranges.
 | `devices` | key (MAC), ips, vendor, name, role, first/last seen, packet/byte counters, protocols, services |
 | `flows` | 5-tuple, app, first/last seen, duration, packets, bytes per direction, state |
 | `traffic` | per minute × application protocol: packets, bytes (feeds the chart) |
+| `mqtt_clients` | client ID, host, broker, username, connects, refused, messages, topics published, subscriptions |
+| `mqtt_topics` | topic, messages, last value, publishers, first/last seen |
 
 `alerts.jsonl` has one evidence record per line (`timestamp`, `rule`
 DET-xxx, `severity`, `source_ip`, `destination_ip`, `description`, `mitre`,

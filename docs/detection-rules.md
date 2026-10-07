@@ -37,9 +37,12 @@ Design principles:
 | DET-006 | `traffic_spike` | high | T1498 Network Denial of Service / T0814 |
 | DET-007 | `failed_connections` | medium (refused), high (MQTT auth) | T1110 Brute Force / T0812 Default Credentials |
 | DET-008 | `device_change` | high (IP conflict), low (IP change) | T1557.002 ARP Cache Poisoning, T1036 Masquerading / T0830 Adversary-in-the-Middle |
+| **DET-009** | `mqtt_activity` | medium (new client, burst, new topic, broad subscription), high (topic spoofing), low (other new subscription) | ICS T0856 Spoof Reporting Message, T0855 Unauthorized Command Message, T0801 Monitor Process State |
 
 DET-001 to DET-005 are the core rules. DET-006 to DET-008 add evidence to
-the same incidents: volume, brute force, address spoofing.
+the same incidents: volume, brute force, address spoofing. DET-009 (Week 4)
+looks inside the IoT protocol itself: MQTT clients, topics and message
+rates.
 
 Every alert is written to `alerts.jsonl` as an evidence record:
 
@@ -288,6 +291,45 @@ subnet carries the router's MAC, so monitor one layer-2 segment per sensor.
 Validated live in the Docker lab with gratuitous ARP
 ([lab guide](lab-setup.md#asset-register-week-2)).
 
+## DET-009 `mqtt_activity`: abnormal MQTT activity (Week 4)
+
+**Logic.** The MQTT tracker ([`iotmon/mqtt.py`](../iotmon/mqtt.py)) maps
+every MQTT packet to a client ID (from the session's CONNECT) and a broker,
+and the baseline learns, per device, the client IDs it connects with, the
+topics it publishes and subscribes to, and its busiest 60 s of publishing.
+After the learning period:
+
+| Check | Fires when | Severity |
+|---|---|---|
+| New client | a host that never used MQTT connects to the broker, or a known host uses a new client ID | medium |
+| Message burst | publishes in 60 s ≥ max(30, 5 × the client's learned peak) | medium |
+| New topic | a client publishes to a topic outside its baseline (max 3 alerts per client per 10 min) | medium |
+| Topic spoofing | a client publishes to a topic that only *other* devices published during the baseline | high |
+| Subscription | a subscription the client never made: `#` or `$SYS/...` is medium, anything else low | low / medium |
+
+**Why at the protocol level.** A sensor keeps one MQTT session open for
+days, so the TCP view barely changes when it misbehaves. Ten times more
+messages, a fake motor-speed reading or a new subscriber are all invisible
+to DET-003 (no new connections) and usually to DET-006 (small messages). The
+broker decides who may publish what. The monitor checks whether what
+happened matches what normally happens.
+
+**Topic ownership.** On an industrial line every topic normally has exactly
+one publisher: the device that measures it. A second publisher on
+`factory/motor/rpm` is either a misconfiguration or someone feeding false
+values to the HMI (ICS T0856 Spoof Reporting Message), or commands to a
+device (T0855). That is why it is the only high-severity MQTT check.
+
+**False positives.** New legitimate devices or dashboards (approve them by
+re-learning the baseline), firmware that adds topics, a client that
+reconnects with a random client ID (common in libraries' default settings;
+the evidence shows the IDs). Sessions already open when the monitor starts
+show no CONNECT, so their client ID is unknown until they reconnect.
+
+**Blind spots.** MQTT over TLS (8883) hides topics and payloads from a
+network monitor; the broker's own logs would be needed. Without broker ACLs,
+detection is the only control: in the lab every device shares one account.
+
 ---
 
 ## Validating the rules
@@ -295,7 +337,8 @@ Validated live in the Docker lab with gratuitous ARP
 | Evidence | How |
 |---|---|
 | Unit tests per rule, positive *and* negative cases | `pytest tests/test_detections.py` |
-| One controlled scenario per core rule, plus a near miss, each triggering exactly its rules | `python tools/run_scenarios.py`, `pytest tests/test_scenarios.py` |
+| One controlled scenario per core rule, three for MQTT, plus a near miss, each triggering exactly its rules | `python tools/run_scenarios.py`, `pytest tests/test_scenarios.py` |
+| MQTT tracker and every DET-009 check, positive and negative | `pytest tests/test_mqtt.py` |
 | Full kill chain on the sample capture, exact alert list | `pytest tests/test_end_to_end.py` |
 | Five minutes of normal traffic raise zero alerts | `test_baseline_is_quiet` |
 | Live, against real containers | `python tools/lab_scenarios.py` ([lab guide](lab-setup.md#detection-scenarios-week-3)) |
@@ -308,6 +351,7 @@ Sample capture result:
 10:35:10  [ALERT HIGH]     DET-002 port_scan: Port scan: 192.168.1.66 probed 15 ports on 192.168.1.22
 10:35:30  [ALERT HIGH]     DET-004 suspicious_port: TELNET session 192.168.1.66 -> 192.168.1.22:23
 10:35:52  [ALERT MEDIUM]   DET-007 failed_connections: Repeated failed connections: 192.168.1.66 -> 192.168.1.21:23 (10x)
+10:36:00  [ALERT MEDIUM]   DET-009 mqtt_activity: New MQTT client: 192.168.1.66 connected to broker 192.168.1.10 as 'probe-0'
 10:36:06  [ALERT HIGH]     DET-007 failed_connections: MQTT authentication failures: 192.168.1.66 refused 5x by broker 192.168.1.10
 10:36:35  [ALERT MEDIUM]   DET-005 external_connection: Unexpected external connection: 192.168.1.22 -> 198.51.100.23:6667 (cnc.badbot.example)
 10:36:35  [ALERT CRITICAL] DET-004 suspicious_port: IRC session 192.168.1.22 -> 198.51.100.23:6667
@@ -318,6 +362,7 @@ Sample capture result:
 
 Read top to bottom, this is the incident timeline: a rogue device joins,
 discovers hosts, scans the camera, logs in over Telnet, gets refused by the
-plug, tries to guess MQTT credentials. Then the camera starts acting like a
+plug, connects to the MQTT broker as a client it has never been and tries to
+guess credentials. Then the camera starts acting like a
 bot: it resolves and joins an IRC C2 server, and floods an external host
 by IP, visible as a new destination, a connection burst and a volume spike.

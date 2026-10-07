@@ -54,6 +54,7 @@ RULES: dict[str, tuple[str, str]] = {
     "traffic_spike": ("DET-006", "Traffic volume spike"),
     "failed_connections": ("DET-007", "Repeated failed connections"),
     "device_change": ("DET-008", "Device address change"),
+    "mqtt_activity": ("DET-009", "Abnormal MQTT activity"),
 }
 
 

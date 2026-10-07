@@ -12,6 +12,7 @@ a pcap gives exactly the same alerts as watching the traffic live.
     DET-006  traffic_spike        Traffic volume spike
     DET-007  failed_connections   Repeated failed connections
     DET-008  device_change        Device address change (IP conflict / change)
+    DET-009  mqtt_activity        Abnormal MQTT activity (new client, burst, topic, subscription)
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from typing import TYPE_CHECKING
 
 from .baseline import Baseline
 from .models import KNOWN_SERVICES, Alert, PacketRecord
+from .mqtt import MqttTracker, wildcard_scope
 
 if TYPE_CHECKING:
     from .assets import AssetRegister
@@ -44,6 +46,7 @@ class Context:
         self.attempt = False  # this packet is a client opening a connection (TCP SYN / new UDP flow)
         self.first_ts: float | None = None
         self.fired: dict[tuple[str, str | None], float] = {}  # (rule, src) -> last alert time
+        self.mqtt = MqttTracker()  # broker-level view; .events holds this packet's MQTT events
 
     def recently_fired(self, rule: str, src: str | None, within: float, now: float) -> bool:
         ts = self.fired.get((rule, src))
@@ -623,11 +626,146 @@ class DeviceChangeDetector(Detector):
 
 # Order matters where one rule defers to another: port_scan runs before
 # connection_rate, which stays quiet for sources already flagged as scanning.
+# --------------------------------------------------------------------------- #
+class MqttActivityDetector(Detector):
+    """DET-009: MQTT behaviour that differs from the baseline, seen at the
+    protocol level rather than as TCP connections:
+
+    new client     a host connects to the broker that never used MQTT during
+                   the baseline, or with a client ID it never used
+    message burst  publishes per window >= max(min_messages, peak_factor x
+                   the client's learned peak) on its existing session
+    topic          a client publishes to a topic it never used (medium), or
+                   to a topic only *other* devices published (high: spoofed
+                   telemetry or commands)
+    subscription   a subscription the client never made; a wildcard that
+                   matches every topic ("#") or broker internals ($SYS) is
+                   medium, other new subscriptions low
+    """
+
+    name = "mqtt_activity"
+
+    def __init__(self, cfg: dict):
+        super().__init__(cfg)
+        self.cooldown = float(cfg.get("cooldown_s", 600))
+        self.window = float(cfg.get("window_s", 60))
+        self.floor = int(cfg.get("min_messages", 30))
+        self.factor = float(cfg.get("peak_factor", 5.0))
+        self.topic_alerts = int(cfg.get("topic_alerts", 3))
+        self.recent: dict[str, deque] = defaultdict(deque)  # ip -> (ts, topic) of publishes
+        self.reported: dict[str, deque] = defaultdict(deque)  # ip -> times of topic alerts
+
+    def on_packet(self, rec, ctx):
+        alerts = []
+        for ev in ctx.mqtt.events:
+            if ev.kind == "publish":
+                alerts += self._rate(rec, ev, ctx)
+                if not ctx.learning:
+                    alerts += self._topic(rec, ev, ctx)
+            elif ctx.learning:
+                continue
+            elif ev.kind == "connect":
+                alerts += self._connect(rec, ev, ctx)
+            elif ev.kind == "subscribe":
+                alerts += self._subscribe(rec, ev, ctx)
+        return alerts
+
+    def _alert(self, rec, ev, severity, title, mitre, **details) -> Alert:
+        return Alert(rec.ts, self.name, severity, title, src=ev.ip, dst=ev.broker, mitre=mitre,
+                     details={"client": ev.client, **details})
+
+    def _connect(self, rec, ev, ctx):
+        prof = ctx.baseline.get(ev.ip)
+        used_mqtt = prof is not None and bool(prof.mqtt_client_ids or prof.mqtt_publish or prof.mqtt_subscribe)
+        if not used_mqtt:
+            reason = "host never used MQTT during the baseline"
+        elif prof.mqtt_client_ids and ev.client not in prof.mqtt_client_ids:
+            reason = f"client ID never used by this host (usual: {', '.join(sorted(prof.mqtt_client_ids))})"
+        else:
+            return []
+        if not self._should_fire((ev.ip, "connect"), rec.ts):
+            return []
+        return [self._alert(rec, ev, "medium",
+                            f"New MQTT client: {ev.ip} connected to broker {ev.broker} as '{ev.client}'",
+                            "T0886 Remote Services / T0883 Internet Accessible Device (ICS)",
+                            reasons=[reason], username=rec.meta.get("mqtt_username", ""),
+                            usual_client_ids=sorted(prof.mqtt_client_ids) if prof else [])]
+
+    def _rate(self, rec, ev, ctx):
+        dq = self.recent[ev.ip]
+        dq.append((rec.ts, ev.topic))
+        while dq and rec.ts - dq[0][0] > self.window:
+            dq.popleft()
+        count = len(dq)
+        prof = None if ctx.learning else ctx.baseline.get(ev.ip)
+        peak = prof.peak_mqtt_messages if prof else 0
+        threshold = max(self.floor, math.ceil(self.factor * peak))
+        # Unlike connection attempts (DET-003), a high steady message rate is a
+        # normal property of a telemetry device, so the learning period learns
+        # whatever rate it sees and never alerts. Found live: the motor drive
+        # publishes 60 messages a minute, above the floor.
+        if ctx.learning:
+            ctx.baseline.observe_mqtt_rate(ev.ip, count)
+            return []
+        if count < threshold or not self._should_fire((ev.ip, "rate"), rec.ts):
+            return []
+        topics = Counter(t for _, t in dq)
+        return [self._alert(rec, ev, "medium",
+                            f"MQTT message burst: {ev.ip} published {count} messages in {self.window:g}s "
+                            f"(baseline peak {peak})",
+                            "T0806 Brute Force I/O / T0814 Denial of Service (ICS)",
+                            messages=count, window_s=self.window, baseline_peak=peak, threshold=threshold,
+                            top_topics=[f"{t} x{n}" for t, n in topics.most_common(5)])]
+
+    def _topic(self, rec, ev, ctx):
+        prof = ctx.baseline.get(ev.ip)
+        if prof is not None and ev.topic in prof.mqtt_publish:
+            return []
+        owners = ctx.baseline.topic_owners(ev.topic) - {ev.ip}
+        reported = self.reported[ev.ip]
+        while reported and rec.ts - reported[0] > self.cooldown:
+            reported.popleft()
+        if len(reported) >= self.topic_alerts or not self._should_fire((ev.ip, "topic", ev.topic), rec.ts):
+            return []
+        reported.append(rec.ts)
+        if owners:
+            return [self._alert(rec, ev, "high",
+                                f"MQTT topic spoofing: {ev.ip} published to '{ev.topic}', "
+                                f"normally published only by {', '.join(sorted(owners))}",
+                                "T0856 Spoof Reporting Message / T0855 Unauthorized Command Message (ICS)",
+                                topic=ev.topic, value=ev.value, usual_publishers=sorted(owners),
+                                usual_topics=sorted(prof.mqtt_publish) if prof else [])]
+        return [self._alert(rec, ev, "medium",
+                            f"New MQTT topic: {ev.ip} published to '{ev.topic}', outside the baseline",
+                            "T0855 Unauthorized Command Message (ICS)",
+                            topic=ev.topic, value=ev.value, usual_topics=sorted(prof.mqtt_publish) if prof else [])]
+
+    def _subscribe(self, rec, ev, ctx):
+        prof = ctx.baseline.get(ev.ip)
+        if prof is not None and ev.topic in prof.mqtt_subscribe:
+            return []
+        scope = wildcard_scope(ev.topic)
+        if not self._should_fire((ev.ip, "sub", ev.topic), rec.ts):
+            return []
+        if scope in ("all", "broker"):
+            what = "every topic" if scope == "all" else "broker internals"
+            return [self._alert(rec, ev, "medium",
+                                f"Broad MQTT subscription: {ev.ip} subscribed to '{ev.topic}' ({what})",
+                                "T0801 Monitor Process State / T0861 Point & Tag Identification (ICS)",
+                                topic=ev.topic, scope=scope,
+                                usual_subscriptions=sorted(prof.mqtt_subscribe) if prof else [])]
+        return [self._alert(rec, ev, "low",
+                            f"New MQTT subscription: {ev.ip} subscribed to '{ev.topic}'",
+                            "T0801 Monitor Process State (ICS)",
+                            topic=ev.topic, scope=scope or "single topic",
+                            usual_subscriptions=sorted(prof.mqtt_subscribe) if prof else [])]
+
+
 DETECTORS = {
     cls.name: cls
     for cls in (NewDeviceDetector, PortScanDetector, ConnectionRateDetector, SuspiciousPortDetector,
                 ExternalConnectionDetector, TrafficSpikeDetector, FailedConnectionDetector,
-                DeviceChangeDetector)
+                DeviceChangeDetector, MqttActivityDetector)
 }
 
 
@@ -655,6 +793,10 @@ class DetectionEngine:
             ctx.baseline.observe_session(new_flow.client_ip, new_flow.server_ip, new_flow.server_port,
                                          inv.is_local(new_flow.client_ip), inv.is_local(new_flow.server_ip),
                                          inv.is_external(new_flow.server_ip))
+        for ev in ctx.mqtt.update(rec):
+            if ctx.learning and ev.kind in ("connect", "publish", "subscribe"):
+                client_id = "" if ev.client.endswith(")") else ev.client
+                ctx.baseline.observe_mqtt(ev.kind, ev.ip, client_id, ev.topic)
         alerts = []
         for det in self.detectors:
             found = det.on_packet(rec, ctx)

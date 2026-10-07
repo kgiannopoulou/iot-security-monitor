@@ -27,8 +27,10 @@ def test_mqtt_publish():
            / MQTT(type=3) / MQTTPublish(topic="factory/line1/temp", value='{"c": 21.5}'))
     rec = roundtrip(pkt)
     assert (rec.protocol, rec.port, rec.app) == ("TCP", 1883, "MQTT")
-    assert rec.info == "PUBLISH factory/line1/temp"
+    assert rec.info == 'PUBLISH factory/line1/temp = {"c": 21.5}'
     assert rec.meta["mqtt_topics"] == ["factory/line1/temp"]
+    assert rec.meta["mqtt_messages"] == [{"topic": "factory/line1/temp", "value": '{"c": 21.5}',
+                                          "qos": 0, "retain": False}]
     assert rec.src_mac == "24:0a:c4:00:00:20"
 
 

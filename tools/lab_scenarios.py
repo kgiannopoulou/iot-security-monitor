@@ -5,8 +5,9 @@ which rules fired, through the dashboard API.
     python tools/lab_scenarios.py
 
 DET-001/002 run in a short-lived "rogue" container (Raspberry Pi MAC, new IP);
-DET-003/004/005 run inside the temperature-sensor container, playing a
-compromised device. The attack code is lab/scenarios/attacks.py.
+DET-003/004/005 and the DET-009 burst and spoofing run inside the
+temperature-sensor container, playing a compromised device; the new MQTT
+client runs in the admin workstation container. The attack code is lab/scenarios/attacks.py.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ ATTACKS = (ROOT / "lab" / "scenarios" / "attacks.py").read_bytes()
 ROGUE = ["docker", "run", "--rm", "-i", "--network", "iot-lab_iotlab", "--ip", "172.28.0.66",
          "--mac-address", "b8:27:eb:00:00:66", "iot-lab-temp-sensor", "python", "-"]
 SENSOR = ["docker", "exec", "-i", "iot-lab-temp-sensor-1", "python", "-"]
+ADMIN = ["docker", "exec", "-i", "iot-lab-admin-1", "python", "-"]
 
 STEPS = [
     ("det-001-new-device", "Unknown Raspberry Pi joins and connects to the broker", ROGUE, "hello", {"DET-001"}),
@@ -32,6 +34,11 @@ STEPS = [
     ("det-004-unusual-port", "Sensor opens camera HTTP, then Telnet", SENSOR, "unusual-port", {"DET-004"}),
     ("det-005-external-connection", "Local-only sensor dials 198.51.100.23 (TTL 1)", SENSOR, "external",
      {"DET-005"}),
+    ("det-009-new-mqtt-client", "Admin workstation connects to the broker, subscribes to '#'", ADMIN,
+     "mqtt-new-client", {"DET-004", "DET-009"}),
+    ("det-009-message-burst", "Sensor publishes 10 messages/s for 15 s", SENSOR, "mqtt-burst", {"DET-009"}),
+    ("det-009-topic-spoofing", "Sensor publishes on the motor drive's rpm topic", SENSOR, "mqtt-spoof",
+     {"DET-009"}),
 ]
 
 

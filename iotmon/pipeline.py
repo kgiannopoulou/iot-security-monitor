@@ -70,6 +70,7 @@ class Monitor:
                 self.storage.flows(expired)
             if time.monotonic() - self._last_commit > 2:
                 self.storage.devices(list(self.inventory.devices.values()))
+                self.storage.mqtt(self.engine.ctx.mqtt)
                 self.storage.commit()
                 self._last_commit = time.monotonic()
         if self.assets is not None and time.monotonic() - self._last_asset_save > 30:
@@ -115,6 +116,7 @@ class Monitor:
         if self.storage:
             self.storage.flows(self.flows.drain())
             self.storage.devices(list(self.inventory.devices.values()))
+            self.storage.mqtt(self.engine.ctx.mqtt)
             self.storage.close()
             self.storage = None
 

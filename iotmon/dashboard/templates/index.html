@@ -112,6 +112,20 @@
   </section>
 
   <section class="card full">
+    <h2>MQTT clients</h2>
+    <div class="scroll"><table id="mqtt-clients">
+      <thead><tr><th>Client ID</th><th>Host</th><th>Broker</th><th>User</th><th class="num">Connects</th>
+        <th class="num">Refused</th><th class="num">Messages</th><th>Publishes to</th><th>Subscribed to</th><th>Last seen</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <h2 style="margin-top:24px">MQTT topics</h2>
+    <div class="scroll"><table id="mqtt-topics">
+      <thead><tr><th>Topic</th><th>Last value</th><th class="num">Messages</th><th>Publishers</th><th>Last seen</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+
+  <section class="card full">
     <h2>Device inventory</h2>
     <div class="scroll"><table id="devices">
       <thead><tr><th>IP</th><th>MAC</th><th>Vendor</th><th>Role</th><th>Name</th><th>Services</th>
@@ -237,11 +251,37 @@ function drawDevices(rows) {
     </tr>`).join("") : `<tr><td colspan="13" class="empty">No devices seen yet.</td></tr>`;
 }
 
+function drawMqtt(m) {
+  const list = v => esc((v || "").split(",").filter(Boolean).join(", ") || "-");
+  document.querySelector("#mqtt-clients tbody").innerHTML = m.clients.length ? m.clients.map(c => `
+    <tr>
+      <td class="mono">${esc(c.client_id || c.key)}</td>
+      <td class="mono">${esc(c.ip)}</td>
+      <td class="mono">${esc(c.broker)}</td>
+      <td class="mono">${esc(c.username || "-")}</td>
+      <td class="num">${c.connects}</td>
+      <td class="num">${c.refused}</td>
+      <td class="num">${c.messages.toLocaleString()}</td>
+      <td class="mono">${list(c.topics)}</td>
+      <td class="mono">${list(c.subscriptions)}</td>
+      <td class="mono">${fmtTime(c.last_seen)}</td>
+    </tr>`).join("") : `<tr><td colspan="10" class="empty">No MQTT traffic seen yet.</td></tr>`;
+  document.querySelector("#mqtt-topics tbody").innerHTML = m.topics.length ? m.topics.map(t => `
+    <tr>
+      <td class="mono">${esc(t.topic)}</td>
+      <td class="mono">${esc(t.last_value)}</td>
+      <td class="num">${t.messages.toLocaleString()}</td>
+      <td class="mono">${list(t.publishers)}</td>
+      <td class="mono">${fmtTime(t.last_seen)}</td>
+    </tr>`).join("") : `<tr><td colspan="5" class="empty">No topics yet.</td></tr>`;
+}
+
 async function refresh() {
   try {
     const get = p => fetch(p).then(r => r.json());
-    const [s, t, a, d] = await Promise.all([get("api/summary"), get("api/traffic"), get("api/alerts"), get("api/devices")]);
-    drawSummary(s); drawTraffic(t); drawAlerts(a); drawDevices(d);
+    const [s, t, a, d, m] = await Promise.all([get("api/summary"), get("api/traffic"), get("api/alerts"),
+                                               get("api/devices"), get("api/mqtt")]);
+    drawSummary(s); drawTraffic(t); drawAlerts(a); drawDevices(d); drawMqtt(m);
   } catch (e) { console.error(e); }
 }
 refresh();

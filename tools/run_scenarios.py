@@ -23,7 +23,7 @@ from iotmon.config import load_config  # noqa: E402
 from iotmon.pipeline import Monitor  # noqa: E402
 
 KILL_CHAIN = Scenario("iot-lab (full kill chain)",
-                      ("DET-001", "DET-002", "DET-003", "DET-004", "DET-005", "DET-006", "DET-007"),
+                      ("DET-001", "DET-002", "DET-003", "DET-004", "DET-005", "DET-006", "DET-007", "DET-009"),
                       "Rogue Pi: discovery, scan, Telnet, brute force; camera joins a botnet", None)
 
 
@@ -47,7 +47,8 @@ def main() -> int:
     print(f"{'SCENARIO':<30} {'EXPECTED':<20} {'FIRED':<20} {'ALERTS':>6}  RESULT")
     for name, expect, fired, n, ok in rows:
         if len(expect) > 20:
-            expect = fired = "DET-001..007" if ok else fired
+            expect = "DET-001..007, 009"
+            fired = expect if ok else fired
         print(f"{name:<30} {expect:<20} {fired:<20} {n:>6}  {'PASS' if ok else 'FAIL'}")
 
     for sc, alerts in details:
