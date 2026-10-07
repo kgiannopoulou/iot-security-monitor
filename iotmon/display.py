@@ -15,6 +15,10 @@ DETAIL_RULES = {
     "new_device": (("IP", "ip"), ("MAC", "mac"), ("Vendor", "vendor"), ("First packet", "first_packet")),
     "device_change": (("IP", "ip"), ("MAC", "mac"), ("Vendor", "vendor"), ("Previous IPs", "previous_ips"),
                       ("Previous MAC", "previous_mac"), ("Compared with", "compared_with")),
+    "connection_rate": (("Connections", "connections"), ("Baseline peak", "baseline_peak"),
+                        ("Threshold", "threshold"), ("Top targets", "top_targets")),
+    "suspicious_port": (("Why", "reasons"),),
+    "external_connection": (("Why", "reasons"), ("Usual peers", "usual_external_peers")),
 }
 
 
@@ -46,10 +50,10 @@ class Printer:
         tag = f"[ALERT {alert.severity.upper()}]"
         if self.colour:
             tag = f"{COLOURS.get(alert.severity, '')}{tag}{RESET}"
-        print(f"{self._time(alert.ts):<9} {tag} {alert.rule}: {alert.title}", file=self.stream)
+        print(f"{self._time(alert.ts):<9} {tag} {alert.rule_id} {alert.rule}: {alert.title}", file=self.stream)
         for label, key in DETAIL_RULES.get(alert.rule, ()):
             value = alert.details.get(key)
-            if value:
+            if value or value == 0:
                 if isinstance(value, list):
-                    value = ", ".join(value)
+                    value = "; ".join(str(v) for v in value)
                 print(f"{'':<9} {label + ':':<14} {value}", file=self.stream)

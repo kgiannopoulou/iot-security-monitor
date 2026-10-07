@@ -53,7 +53,7 @@ keyed by IP the way the brief asked for):
   "last_seen": "2026-10-07T10:37:55+00:00",
   "protocols": ["ARP", "MQTT", "NTP"],
   "services": [],
-  "connections": 3,
+  "connections": 2,
   "packets": 200,
   "bytes": 14120,
   "status": "approved",
@@ -68,14 +68,14 @@ How each field is filled, all passively (the monitor never sends a packet):
 | `first_seen` / `last_seen` | Timestamp of the first and latest packet the device *sent* |
 | `protocols` | Application protocols it actually spoke. Bare SYNs and RSTs are ignored, otherwise a port scan would "teach" the scanner dozens of protocols |
 | `services` | Ports it *answered* on, so a reply from port 1883 makes it an MQTT broker |
-| `connections` | Conversations (flows) it took part in, as client or server. A flow is opened by the first packet of a new client-socket/server-socket pair, which is why the temperature sensor has only 3: it keeps one long MQTT session open |
+| `connections` | Conversations (flows) it took part in, as client or server. A flow is opened by the first packet of a new client-socket/server-socket pair, which is why the temperature sensor has only 2 (one NTP exchange, one long MQTT session) |
 | `role` | Inferred from services first (MQTT broker, DNS server, camera with Telnet + web UI), then behaviour (publishes MQTT → sensor/actuator) |
 | `name` | MQTT client ID from its CONNECT packet |
 | `status` | `approved` / `pending` / `new` (see section 3) |
 
 `connections` is a useful shape metric. In the sample capture the smart plug
-has 31, because it opens a new HTTPS session to its cloud each check-in. The
-IP camera has 20 during the baseline and **2,466** after it is infected and
+has 30, because it opens a new HTTPS session to its cloud each check-in. The
+IP camera has 19 during the baseline and **2,465** after it is infected and
 starts flooding a target. The count alone tells you its behaviour changed.
 
 ## 3. Remembering devices: the asset register
@@ -140,12 +140,12 @@ The register now shows the intruder waiting for review:
 ```
 $ python -m iotmon inventory show
 IP              MAC               VENDOR                     ROLE                             PROTOCOLS                 CONN  FIRST SEEN (UTC)     LAST SEEN (UTC)      STATUS
-192.168.1.21    24:0a:c4:00:00:21 Espressif (ESP32/ESP8266)  MQTT client (sensor/actuator)    ARP,DNS,HTTPS,MQTT,NTP      31  2026-10-07 10:30:01  2026-10-07 10:37:53  approved
-192.168.1.1     50:c7:bf:00:00:01 TP-Link                    DNS server                       ARP,DNS,NTP                 21  2026-10-07 10:30:01  2026-10-07 10:37:15  approved
-192.168.1.20    24:0a:c4:00:00:20 Espressif (ESP32/ESP8266)  MQTT client (sensor/actuator)    ARP,MQTT,NTP                 3  2026-10-07 10:30:01  2026-10-07 10:37:55  approved
+192.168.1.21    24:0a:c4:00:00:21 Espressif (ESP32/ESP8266)  MQTT client (sensor/actuator)    ARP,DNS,HTTPS,MQTT,NTP      30  2026-10-07 10:30:01  2026-10-07 10:37:53  approved
+192.168.1.1     50:c7:bf:00:00:01 TP-Link                    DNS server                       ARP,DNS,NTP                 17  2026-10-07 10:30:01  2026-10-07 10:37:15  approved
+192.168.1.20    24:0a:c4:00:00:20 Espressif (ESP32/ESP8266)  MQTT client (sensor/actuator)    ARP,MQTT,NTP                 2  2026-10-07 10:30:01  2026-10-07 10:37:55  approved
 192.168.1.10    dc:a6:32:00:00:10 Raspberry Pi Trading       MQTT broker                      ARP,MQTT                    10  2026-10-07 10:30:01  2026-10-07 10:37:55  approved
-192.168.1.22    44:19:b6:00:00:22 Hikvision                  IP camera / embedded web device  ARP,DNS,HTTP,HTTPS,IRC,N  2466  2026-10-07 10:30:04  2026-10-07 10:37:50  approved
-192.168.1.5     3c:52:82:00:00:05 HP                         client                           ARP,HTTP,NTP                10  2026-10-07 10:30:06  2026-10-07 10:37:40  approved
+192.168.1.22    44:19:b6:00:00:22 Hikvision                  IP camera / embedded web device  ARP,DNS,HTTP,HTTPS,IRC,N  2465  2026-10-07 10:30:04  2026-10-07 10:37:50  approved
+192.168.1.5     3c:52:82:00:00:05 HP                         client                           ARP,HTTP,NTP                 9  2026-10-07 10:30:06  2026-10-07 10:37:40  approved
 192.168.1.66    b8:27:eb:00:00:66 Raspberry Pi Foundation    unclassified                     ARP,MQTT,TELNET             64  2026-10-07 10:35:00  2026-10-07 10:36:10  pending
 
 7 assets, 1 pending review

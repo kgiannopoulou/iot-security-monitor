@@ -3,30 +3,51 @@
 Every detector is a small state machine fed one PacketRecord at a time.
 Time windows use the *packet* timestamp, never the wall clock, so replaying
 a pcap gives exactly the same alerts as watching the traffic live.
+
+    DET-001  new_device           New/unrecognized device
+    DET-002  port_scan            Port scanning behaviour
+    DET-003  connection_rate      Abnormal connection rate
+    DET-004  suspicious_port      Communication with unusual ports
+    DET-005  external_connection  Unexpected external connection
+    DET-006  traffic_spike        Traffic volume spike
+    DET-007  failed_connections   Repeated failed connections
+    DET-008  device_change        Device address change (IP conflict / change)
 """
 
 from __future__ import annotations
 
 import ipaddress
 import math
-from collections import defaultdict, deque
+from collections import Counter, defaultdict, deque
 from typing import TYPE_CHECKING
 
+from .baseline import Baseline
 from .models import KNOWN_SERVICES, Alert, PacketRecord
 
 if TYPE_CHECKING:
     from .assets import AssetRegister
+    from .flows import Flow
     from .inventory import Device, Inventory
 
 
 class Context:
     """What the pipeline knows when a detector sees a packet."""
 
-    def __init__(self, inventory: Inventory, assets: AssetRegister | None = None):
+    def __init__(self, inventory: Inventory, assets: AssetRegister | None = None,
+                 baseline: Baseline | None = None):
         self.inventory = inventory
         self.assets = assets  # persistent asset register, when one was loaded
+        self.baseline = baseline if baseline is not None else Baseline()
+        self.learning = False  # still inside the baseline learning period
         self.new_device: Device | None = None
+        self.new_flow: Flow | None = None  # conversation opened by this packet
+        self.attempt = False  # this packet is a client opening a connection (TCP SYN / new UDP flow)
         self.first_ts: float | None = None
+        self.fired: dict[tuple[str, str | None], float] = {}  # (rule, src) -> last alert time
+
+    def recently_fired(self, rule: str, src: str | None, within: float, now: float) -> bool:
+        ts = self.fired.get((rule, src))
+        return ts is not None and now - ts <= within
 
 
 class Detector:
@@ -85,7 +106,8 @@ class PortScanDetector(Detector):
                 alerts.append(Alert(
                     rec.ts, self.name, "medium", f"ARP sweep from {rec.src_ip}",
                     src=rec.src_ip, mitre="T1018 Remote System Discovery / ICS T0846",
-                    details={"targets": len(targets), "window_s": self.window, "mac": rec.src_mac},
+                    details={"addresses_observed": len(targets), "window_s": self.window, "threshold": self.arp,
+                             "mac": rec.src_mac},
                 ))
             return alerts
 
@@ -101,8 +123,8 @@ class PortScanDetector(Detector):
             alerts.append(Alert(
                 rec.ts, self.name, "high", f"Port scan: {rec.src_ip} probed {len(ports_on_dst)} ports on {rec.dst_ip}",
                 src=rec.src_ip, dst=rec.dst_ip, mitre="T1046 Network Service Discovery / ICS T0846",
-                details={"distinct_ports": len(ports_on_dst), "sample_ports": sorted(ports_on_dst)[:20],
-                         "window_s": self.window},
+                details={"ports_observed": len(ports_on_dst), "sample_ports": sorted(ports_on_dst)[:20],
+                         "window_s": self.window, "threshold": self.vertical},
             ))
         hosts_on_port = {d for _, d, p in dq if p == rec.dport}
         if len(hosts_on_port) >= self.horizontal and self._should_fire((rec.src_ip, rec.dport, "h"), rec.ts):
@@ -110,7 +132,8 @@ class PortScanDetector(Detector):
                 rec.ts, self.name, "high",
                 f"Host sweep: {rec.src_ip} probed port {rec.dport} on {len(hosts_on_port)} hosts",
                 src=rec.src_ip, mitre="T1046 Network Service Discovery / ICS T0846",
-                details={"port": rec.dport, "distinct_hosts": len(hosts_on_port), "window_s": self.window},
+                details={"port": rec.dport, "hosts_observed": len(hosts_on_port), "window_s": self.window,
+                         "threshold": self.horizontal},
             ))
         return alerts
 
@@ -234,9 +257,77 @@ class TrafficSpikeDetector(Detector):
 
 
 # --------------------------------------------------------------------------- #
+class ConnectionRateDetector(Detector):
+    """DET-003: a device opens far more connections per window than it did
+    during the baseline. Counts connection *attempts* (TCP SYN, new UDP
+    conversation) per source in a sliding window and compares the count with
+    the device's own learned peak:
+
+        alert when  count >= max(min_connections, peak_factor * learned peak)
+
+    Many attempts spread over many ports or hosts is a scan: once DET-002 has
+    flagged a source, its connection rate is already explained and stays quiet.
+    """
+
+    name = "connection_rate"
+
+    def __init__(self, cfg: dict):
+        super().__init__(cfg)
+        self.window = float(cfg.get("window_s", 60))
+        self.floor = int(cfg.get("min_connections", 20))
+        self.factor = float(cfg.get("peak_factor", 5.0))
+        self.scan_quiet = float(cfg.get("scan_suppress_s", 300))
+        self.recent: dict[str, deque] = defaultdict(deque)  # src -> (ts, dst, port)
+
+    def on_packet(self, rec, ctx):
+        if not ctx.attempt or not ctx.inventory.is_local(rec.src_ip):
+            return []
+        dq = self.recent[rec.src_ip]
+        dq.append((rec.ts, rec.dst_ip, rec.dport))
+        while dq and rec.ts - dq[0][0] > self.window:
+            dq.popleft()
+        count = len(dq)
+        prof = None if ctx.learning else ctx.baseline.get(rec.src_ip)
+        peak = prof.peak_connections if prof else 0
+        threshold = max(self.floor, math.ceil(self.factor * peak))
+        # A trusted capture (`baseline learn`) is learned whatever the rate.
+        if ctx.learning and (count < threshold or ctx.baseline.learn_all):
+            ctx.baseline.observe_rate(rec.src_ip, count)
+            return []
+        if count < threshold:
+            return []
+        # Above the floor during a learning period: anomalous, and never learned.
+        if ctx.recently_fired("port_scan", rec.src_ip, self.scan_quiet, rec.ts):
+            return []
+        if not self._should_fire((rec.src_ip,), rec.ts):
+            return []
+        targets = Counter(f"{d}:{p}" for _, d, p in dq)
+        return [Alert(
+            rec.ts, self.name, "medium",
+            f"Abnormal connection rate: {rec.src_ip} opened {count} connections in {self.window:g}s "
+            f"(baseline peak {peak})",
+            src=rec.src_ip, dst=targets.most_common(1)[0][0].rsplit(":", 1)[0],
+            mitre="T1499 Endpoint Denial of Service / ICS T0814 Denial of Service",
+            details={"connections": count, "window_s": self.window, "baseline_peak": peak,
+                     "threshold": threshold, "distinct_targets": len(targets),
+                     "top_targets": [f"{t} x{n}" for t, n in targets.most_common(5)],
+                     "has_baseline": prof is not None},
+        )]
+
+
+# --------------------------------------------------------------------------- #
 class SuspiciousPortDetector(Detector):
-    """A session is *established* on a port that has no business on an IoT
-    network (Telnet, IRC, ADB, ...), or plaintext MQTT leaves the lab."""
+    """DET-004: a session is *established* (TCP handshake completed, or a UDP
+    service replied) on a port that is unusual, for one of two reasons:
+
+    * the port is outside the device's learned profile: a client that never
+      used it, or a server that never answered on it (medium), or
+    * the port is on a short list of services with no business on an IoT
+      network: Telnet, IRC, ADB, ... (severity per port, baseline or not).
+
+    Attempts that never complete (closed ports, half-open scans) are left to
+    DET-002 and DET-007. Plaintext MQTT to a public address is also flagged.
+    """
 
     name = "suspicious_port"
 
@@ -244,33 +335,157 @@ class SuspiciousPortDetector(Detector):
         super().__init__(cfg)
         self.ports = {int(p): sev for p, sev in cfg.get("ports", {}).items()}
         self.cooldown = float(cfg.get("cooldown_s", 600))
+        self.unusual_severity = cfg.get("unusual_severity", "medium")
+        self.handshakes: dict[tuple, float] = {}  # (client, cport, server, sport) -> SYN-ACK time
 
     def on_packet(self, rec, ctx):
-        if rec.protocol == "TCP" and rec.is_synack and rec.sport in self.ports:
-            server, client, port = rec.src_ip, rec.dst_ip, rec.sport
-        elif rec.protocol == "UDP" and not rec.is_response and rec.dport in self.ports:
-            server, client, port = rec.dst_ip, rec.src_ip, rec.dport
-        elif (rec.protocol == "TCP" and rec.is_syn and rec.dport == 1883
-              and ctx.inventory.is_local(rec.src_ip) and not ctx.inventory.is_local(rec.dst_ip)
-              and _is_public(rec.dst_ip)):
-            if self._should_fire((rec.src_ip, rec.dst_ip, 1883), rec.ts):
-                return [Alert(rec.ts, self.name, "medium",
-                              f"Unencrypted MQTT from {rec.src_ip} to external host {rec.dst_ip}",
-                              src=rec.src_ip, dst=rec.dst_ip, mitre="T1071 Application Layer Protocol",
-                              details={"port": 1883, "advice": "use MQTT over TLS (8883)"})]
-            return []
+        if rec.protocol == "TCP":
+            if (rec.is_syn and rec.dport == 1883 and ctx.inventory.is_local(rec.src_ip)
+                    and not ctx.inventory.is_local(rec.dst_ip) and _is_public(rec.dst_ip)):
+                return self._plain_mqtt(rec)
+            if rec.is_synack:
+                self.handshakes[(rec.dst_ip, rec.dport, rec.src_ip, rec.sport)] = rec.ts
+                if len(self.handshakes) > 10_000:
+                    self.handshakes = {k: t for k, t in self.handshakes.items() if rec.ts - t < 60}
+                return []
+            key = (rec.src_ip, rec.sport, rec.dst_ip, rec.dport)
+            if key not in self.handshakes:
+                return []
+            del self.handshakes[key]
+            if rec.is_rst or "A" not in rec.tcp_flags:
+                return []  # half-open: the client reset instead of completing the handshake
+            client, server, port = rec.src_ip, rec.dst_ip, rec.dport
+        elif rec.protocol == "UDP" and rec.is_response:
+            client, server, port = rec.dst_ip, rec.src_ip, rec.sport
         else:
             return []
+        return self._session(rec, ctx, client, server, port)
 
+    def _session(self, rec, ctx, client, server, port) -> list[Alert]:
+        severity = self.ports.get(port)
+        reasons = ["high-risk service"] if severity else []
+        details = {}
+        if not ctx.learning:
+            cprof = ctx.baseline.get(client) if ctx.inventory.is_local(client) else None
+            sprof = ctx.baseline.get(server) if ctx.inventory.is_local(server) else None
+            if cprof is not None and port not in cprof.client_ports:
+                reasons.append(f"{client} never connected to port {port} during the baseline")
+                details["client_usual_ports"] = sorted(cprof.client_ports)
+            if sprof is not None and port not in sprof.server_ports:
+                reasons.append(f"{server} never answered on port {port} during the baseline")
+                details["server_usual_ports"] = sorted(sprof.server_ports)
+        if not reasons:
+            return []
         if not self._should_fire((client, server, port), rec.ts):
             return []
         service = KNOWN_SERVICES.get(port, str(port))
+        if severity:
+            title = f"{service} session {client} -> {server}:{port}"
+        else:
+            severity = self.unusual_severity
+            title = f"Unusual port: {client} -> {server}:{port} ({service}), outside the baseline"
         return [Alert(
-            rec.ts, self.name, self.ports[port],
-            f"{service} session {client} -> {server}:{port}",
+            rec.ts, self.name, severity, title,
             src=client, dst=server, mitre="T1021 Remote Services / ICS T0886",
-            details={"port": port, "service": service,
-                     "exposed_by": server, "local_server": ctx.inventory.is_local(server)},
+            details={"port": port, "service": service, "protocol": rec.protocol, "reasons": reasons,
+                     **details, "exposed_by": server, "local_server": ctx.inventory.is_local(server)},
+        )]
+
+    def _plain_mqtt(self, rec) -> list[Alert]:
+        if not self._should_fire((rec.src_ip, rec.dst_ip, 1883), rec.ts):
+            return []
+        return [Alert(rec.ts, self.name, "medium",
+                      f"Unencrypted MQTT from {rec.src_ip} to external host {rec.dst_ip}",
+                      src=rec.src_ip, dst=rec.dst_ip, mitre="T1071 Application Layer Protocol",
+                      details={"port": 1883, "reasons": ["plaintext MQTT leaving the site"],
+                               "advice": "use MQTT over TLS (8883)"})]
+
+
+# --------------------------------------------------------------------------- #
+class ExternalConnectionDetector(Detector):
+    """DET-005: a lab device opens a connection to an internet host that is not
+    among the external peers it talked to during the baseline.
+
+    Severity is raised to high when the device never talked to the internet
+    at all during the baseline (a sensor that only speaks to the local
+    broker), or when the address was not obtained from a DNS answer in the
+    last dns_window_s (malware often connects straight to an IP). Contacting
+    fanout_threshold or more unexpected hosts within fanout_window_s raises one
+    high "fan-out" alert; until then at most host_alerts hosts per device and
+    window are reported one by one, so a spreading device cannot flood the
+    alert queue.
+    """
+
+    name = "external_connection"
+
+    def __init__(self, cfg: dict):
+        super().__init__(cfg)
+        self.dns_window = float(cfg.get("dns_window_s", 600))
+        self.fanout_window = float(cfg.get("fanout_window_s", 300))
+        self.fanout = int(cfg.get("fanout_threshold", 10))
+        self.host_alerts = int(cfg.get("host_alerts", 3))
+        self.reported: dict[str, deque] = defaultdict(deque)  # client -> times of per-host alerts
+        self.resolved: dict[tuple[str, str], tuple[float, str]] = {}  # (client, ip) -> (ts, name)
+        self.unexpected: dict[str, dict[str, float]] = defaultdict(dict)  # client -> {ip: last seen}
+
+    def on_packet(self, rec, ctx):
+        answers = rec.meta.get("dns_answers")
+        if answers and rec.dst_ip:
+            for ip in answers:
+                self.resolved[(rec.dst_ip, ip)] = (rec.ts, rec.meta.get("dns_name", ""))
+            if len(self.resolved) > 50_000:
+                self.resolved = {k: v for k, v in self.resolved.items() if rec.ts - v[0] <= self.dns_window}
+            return []
+        if not ctx.attempt or ctx.learning:
+            return []
+        client, server = rec.src_ip, rec.dst_ip
+        if not ctx.inventory.is_local(client) or not ctx.inventory.is_external(server):
+            return []
+        prof = ctx.baseline.get(client)
+        if prof is not None and server in prof.external_peers:
+            return []
+
+        seen = self.unexpected[client]
+        seen[server] = rec.ts
+        for ip, ts in list(seen.items()):
+            if rec.ts - ts > self.fanout_window:
+                del seen[ip]
+        if len(seen) >= self.fanout and self._should_fire((client, "fanout"), rec.ts):
+            return [Alert(
+                rec.ts, self.name, "high",
+                f"External fan-out: {client} contacted {len(seen)} unexpected internet hosts "
+                f"in {self.fanout_window:g}s",
+                src=client, mitre="T1071 Application Layer Protocol",
+                details={"destinations_observed": len(seen), "window_s": self.fanout_window,
+                         "threshold": self.fanout, "sample_destinations": sorted(seen)[:20]},
+            )]
+        if rec.ts - self._last_fired.get((client, "fanout"), -math.inf) < self.cooldown:
+            return []  # already reported as fan-out
+        reported = self.reported[client]
+        while reported and rec.ts - reported[0] > self.fanout_window:
+            reported.popleft()
+        if len(reported) >= self.host_alerts or not self._should_fire((client, server), rec.ts):
+            return []
+        reported.append(rec.ts)
+
+        hit = self.resolved.get((client, server))
+        name = hit[1] if hit and rec.ts - hit[0] <= self.dns_window else None
+        local_only = prof is not None and not prof.external_peers
+        if prof is None:
+            reasons = ["device has no baseline"]
+        elif local_only:
+            reasons = ["device never talked to the internet during the baseline"]
+        else:
+            reasons = ["destination is not one of the device's usual external peers"]
+        if name is None:
+            reasons.append("no DNS lookup for this address (direct-to-IP connection)")
+        return [Alert(
+            rec.ts, self.name, "high" if local_only or name is None else "medium",
+            f"Unexpected external connection: {client} -> {server}:{rec.dport}" + (f" ({name})" if name else ""),
+            src=client, dst=server, mitre="T1071 Application Layer Protocol / ICS T0869",
+            details={"port": rec.dport, "protocol": rec.protocol, "dns_name": name, "reasons": reasons,
+                     "usual_external_peers": sorted(prof.external_peers) if prof else [],
+                     "unexpected_destinations_in_window": len(seen), "window_s": self.fanout_window},
         )]
 
 
@@ -406,29 +621,46 @@ class DeviceChangeDetector(Detector):
         )
 
 
+# Order matters where one rule defers to another: port_scan runs before
+# connection_rate, which stays quiet for sources already flagged as scanning.
 DETECTORS = {
     cls.name: cls
-    for cls in (PortScanDetector, NewDeviceDetector, TrafficSpikeDetector,
-                SuspiciousPortDetector, FailedConnectionDetector, DeviceChangeDetector)
+    for cls in (NewDeviceDetector, PortScanDetector, ConnectionRateDetector, SuspiciousPortDetector,
+                ExternalConnectionDetector, TrafficSpikeDetector, FailedConnectionDetector,
+                DeviceChangeDetector)
 }
 
 
 class DetectionEngine:
-    def __init__(self, config: dict, inventory: Inventory, assets: AssetRegister | None = None):
-        self.ctx = Context(inventory, assets)
+    def __init__(self, config: dict, inventory: Inventory, assets: AssetRegister | None = None,
+                 baseline: Baseline | None = None):
+        self.ctx = Context(inventory, assets, baseline)
         self.detectors: list[Detector] = []
         for name, cls in DETECTORS.items():
             cfg = config.get(name, {})
             if cfg.get("enabled", True):
                 self.detectors.append(cls(cfg))
 
-    def process(self, rec: PacketRecord, new_device: Device | None) -> list[Alert]:
-        if self.ctx.first_ts is None:
-            self.ctx.first_ts = rec.ts
-        self.ctx.new_device = new_device
+    def process(self, rec: PacketRecord, new_device: Device | None, new_flow: Flow | None = None) -> list[Alert]:
+        ctx = self.ctx
+        if ctx.first_ts is None:
+            ctx.first_ts = rec.ts
+        ctx.learning = ctx.baseline.is_learning(rec.ts - ctx.first_ts)
+        ctx.new_device = new_device
+        ctx.new_flow = new_flow
+        ctx.attempt = (new_flow is not None and new_flow.client_ip == rec.src_ip
+                       and (rec.is_syn or rec.protocol == "UDP"))
+        if ctx.learning and new_flow is not None:
+            inv = ctx.inventory
+            ctx.baseline.observe_session(new_flow.client_ip, new_flow.server_ip, new_flow.server_port,
+                                         inv.is_local(new_flow.client_ip), inv.is_local(new_flow.server_ip),
+                                         inv.is_external(new_flow.server_ip))
         alerts = []
         for det in self.detectors:
-            alerts += det.on_packet(rec, self.ctx)
+            found = det.on_packet(rec, ctx)
+            for a in found:
+                ctx.fired[(a.rule, a.src)] = a.ts
+            alerts += found
         return alerts
 
     def flush(self) -> list[Alert]:

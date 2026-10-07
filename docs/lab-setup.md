@@ -116,10 +116,40 @@ SQLite's WAL shared memory does not work across the Docker Desktop file-share
 boundary, so a host-side connection can checkpoint away the containers' WAL.
 Query it through the dashboard API or `docker compose exec dashboard` instead.
 
-## Full detection set
+## Detection scenarios (Week 3)
 
-The full detection set (scan, rogue device, brute force, flood) is exercised
-by the bundled sample capture instead of live traffic. See
+The monitor also runs with `--baseline /data/baseline.json` and the lab's
+own config, [`lab/monitor.toml`](../lab/monitor.toml). On a fresh start it
+learns each device's normal behaviour during the first 120 s and saves it
+to `data/lab/baseline.json`. Once that file exists, run the controlled
+scenarios:
+
+```bash
+python tools/lab_scenarios.py                                   # all five, about a minute
+python tools/lab_scenarios.py --only det-003-connection-flood   # one
+```
+
+| Scenario | Runs in | Action | Must fire |
+|---|---|---|---|
+| `det-001-new-device` | new container, Raspberry Pi MAC, 172.28.0.66 | one connection to the broker | DET-001 |
+| `det-002-port-scan` | same rogue container | TCP connect scan of 30 broker ports | DET-002 |
+| `det-003-connection-flood` | `temp-sensor` (compromised) | 30 broker connections in about 10 s | DET-003 |
+| `det-004-unusual-port` | `temp-sensor` | camera web UI, then camera Telnet | DET-004 |
+| `det-005-external-connection` | `temp-sensor` | TCP to 198.51.100.23:8883 with **TTL 1** | DET-005 |
+
+The attack code is [`lab/scenarios/attacks.py`](../lab/scenarios/attacks.py)
+(standard library only, piped into the containers). Every target is a lab
+address. The single off-lab connection is sent with TTL 1, so the lab
+gateway drops it and nothing leaves the lab.
+
+DET-001 fires only once per MAC: the rogue device is then in the register as
+`pending`. To repeat the full run, stop the lab and start again from an
+empty `data/lab/`. Results from 2026-10-07 (5/5 passed, plus the gateway
+finding from the first run): [`sample-output/live-lab-week3.txt`](sample-output/live-lab-week3.txt)
+and the [Week 3 write-up](03-detection-engine.md#6-the-scenarios-live-in-the-docker-lab).
+
+The full kill chain (ARP sweep, brute force, botnet C2, flood) is exercised
+by the bundled sample capture. See
 [detection-rules.md](detection-rules.md#validating-the-rules).
 
 ## Notes

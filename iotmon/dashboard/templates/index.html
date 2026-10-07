@@ -202,7 +202,7 @@ function drawSummary(s) {
       <span class="num">${x.count}</span>
     </div>`).join("");
   document.querySelector("#rules tbody").innerHTML = s.by_rule.length
-    ? s.by_rule.map(r => `<tr><td class="mono">${esc(r.rule)}</td><td class="num">${r.n}</td></tr>`).join("")
+    ? s.by_rule.map(r => `<tr><td class="mono">${esc(r.rule_id || "")}</td><td class="mono">${esc(r.rule)}</td><td class="num">${r.n}</td></tr>`).join("")
     : `<tr><td class="muted">no alerts</td></tr>`;
 }
 
@@ -211,7 +211,7 @@ function drawAlerts(rows) {
     <tr>
       <td class="mono">${fmtTime(a.ts)}</td>
       <td>${sevBadge(a.severity)}</td>
-      <td class="mono">${esc(a.rule)}</td>
+      <td class="mono">${esc(a.rule_id || "")}<br><span class="muted">${esc(a.rule)}</span></td>
       <td>${esc(a.title)}</td>
       <td class="muted">${esc(a.mitre)}</td>
       <td><details><summary>view</summary><pre class="mono">${esc(JSON.stringify(a.details, null, 2))}</pre></details></td>

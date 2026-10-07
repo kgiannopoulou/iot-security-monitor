@@ -41,7 +41,7 @@ def create_app(db_path: str | Path) -> Flask:
         traffic = query("SELECT COALESCE(SUM(packets),0) packets, COALESCE(SUM(bytes),0) bytes,"
                         " MIN(minute) first, MAX(minute) last FROM traffic")
         devices = query("SELECT COUNT(*) n FROM devices")
-        rules = query("SELECT rule, COUNT(*) n FROM alerts GROUP BY rule ORDER BY n DESC")
+        rules = query("SELECT rule_id, rule, COUNT(*) n FROM alerts GROUP BY rule_id, rule ORDER BY rule_id")
         return jsonify({
             "devices": devices[0]["n"] if devices else 0,
             "packets": traffic[0]["packets"] if traffic else 0,

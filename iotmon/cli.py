@@ -6,6 +6,8 @@
     python -m iotmon dashboard                        # web dashboard
     python -m iotmon inventory learn baseline.pcap    # build the asset register
     python -m iotmon inventory show                   # list known assets
+    python -m iotmon baseline learn baseline.pcap     # learn normal behaviour per device
+    python -m iotmon baseline show                    # what each device normally does
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from pathlib import Path
 
 from . import __version__
 from .assets import DEFAULT_REGISTER, AssetRegister
+from .baseline import DEFAULT_BASELINE, Baseline
 from .config import load_config
 from .display import Printer
 from .pipeline import Monitor
@@ -41,6 +44,9 @@ def _add_common(p: argparse.ArgumentParser) -> None:
     p.add_argument("-c", "--count", type=int, help="stop after N packets")
     p.add_argument("--inventory", metavar="JSON", nargs="?", const=DEFAULT_REGISTER,
                    help=f"use and update the asset register (default path {DEFAULT_REGISTER})")
+    p.add_argument("--baseline", metavar="JSON", nargs="?", const=DEFAULT_BASELINE,
+                   help="compare with a saved behavioural baseline; if the file does not exist yet, "
+                        f"learn it during the learning period and save it (default path {DEFAULT_BASELINE})")
 
 
 def _build_monitor(args) -> Monitor:
@@ -50,7 +56,13 @@ def _build_monitor(args) -> Monitor:
         storage = Storage(args.db, args.out_dir, packet_csv=args.csv, reset=not args.append)
     printer = Printer(show_packets=not args.quiet, utc=args.utc)
     assets = AssetRegister(args.inventory) if args.inventory else None
-    return Monitor(config, storage, printer, assets)
+    baseline = _baseline(args.baseline, config) if args.baseline else None
+    return Monitor(config, storage, printer, assets, baseline=baseline)
+
+
+def _baseline(path: str, config: dict) -> Baseline:
+    return Baseline(path, learning_period=float(config.get("baseline", {}).get("learning_period_s", 120)),
+                    window=float(config["detections"].get("connection_rate", {}).get("window_s", 60)))
 
 
 def _summary(mon: Monitor) -> None:
@@ -64,6 +76,10 @@ def _summary(mon: Monitor) -> None:
         added_txt = ", ".join(f"{n} {status}" for status, n in sorted(added.items())) or "none"
         print(f"asset register {mon.assets.path.as_posix()}: {len(mon.assets)} assets, added: {added_txt}",
               file=sys.stderr)
+    b = mon.baseline
+    if b.path is not None:
+        state = "compared with" if b.frozen else "learned and saved"
+        print(f"baseline {b.path.as_posix()}: {state}, {len(b)} device profiles", file=sys.stderr)
 
 
 def cmd_read(args) -> int:
@@ -120,7 +136,7 @@ def cmd_report(args) -> int:
     print("\nALERTS")
     rows = db.execute("SELECT * FROM alerts ORDER BY ts").fetchall()
     for a in rows:
-        print(f"  {t(a['ts'])}  {a['severity'].upper():<8} {a['rule']:<18} {a['title']}")
+        print(f"  {t(a['ts'])}  {a['severity'].upper():<8} {a['rule_id'] or '':<8} {a['rule']:<19} {a['title']}")
     if not rows:
         print("  none")
     return 0
@@ -195,6 +211,48 @@ def cmd_inventory_approve(args) -> int:
     return rc
 
 
+def cmd_baseline_learn(args) -> int:
+    """Learn normal behaviour from traffic you trust (the whole capture is the baseline)."""
+    from .capture import read_pcap
+
+    config = load_config(args.config)
+    path = Path(args.baseline)
+    if path.exists() and not args.force:
+        print(f"error: {path.as_posix()} exists - pass --force to replace it", file=sys.stderr)
+        return 1
+    baseline = _baseline(None, config)
+    baseline.path, baseline.learn_all = path, True
+    records = read_pcap(args.pcap)
+    if args.duration is not None:
+        records = _first_seconds(records, args.duration)
+    mon = Monitor(config, baseline=baseline)
+    mon.run(records)
+    print(f"learned {len(baseline)} device profiles from {mon.packets} packets -> {path.as_posix()}",
+          file=sys.stderr)
+    return 0
+
+
+def cmd_baseline_show(args) -> int:
+    baseline = Baseline(args.baseline)
+    if not len(baseline):
+        print(f"no baseline at {args.baseline} - run 'baseline learn' or 'read --baseline'", file=sys.stderr)
+        return 1
+    if args.json:
+        print(Path(args.baseline).read_text(encoding="utf-8"), end="")
+        return 0
+    span = baseline.learned
+    if span:
+        print(f"learned from {span.get('packets', '?')} packets, {span.get('start', '?')} to {span.get('end', '?')}"
+              f" (connection rate per {baseline.window:g}s)\n")
+    print(f"{'IP':<15} {'USES PORTS':<24} {'SERVES PORTS':<16} {'PEAK CONN':>9}  INTERNET PEERS")
+    for ip, prof in baseline.devices.items():
+        uses = ",".join(map(str, sorted(prof.client_ports))) or "-"
+        serves = ",".join(map(str, sorted(prof.server_ports))) or "-"
+        peers = ", ".join(sorted(prof.external_peers)) or "none (local only)"
+        print(f"{ip:<15} {uses[:24]:<24} {serves[:16]:<16} {prof.peak_connections:>9}  {peers}")
+    return 0
+
+
 def cmd_dashboard(args) -> int:
     from .dashboard.app import create_app
 
@@ -244,6 +302,21 @@ def main(argv: list[str] | None = None) -> int:
     for q in inv.choices.values():
         q.add_argument("--inventory", default=DEFAULT_REGISTER, metavar="JSON",
                        help=f"asset register file (default {DEFAULT_REGISTER})")
+
+    p = sub.add_parser("baseline", help="manage the behavioural baseline (normal behaviour per device)")
+    bl = p.add_subparsers(dest="action", required=True)
+    q = bl.add_parser("learn", help="learn the baseline from a capture of trusted traffic")
+    q.add_argument("pcap")
+    q.add_argument("-d", "--duration", type=float, help="only use the first N seconds of the capture")
+    q.add_argument("--config", help="TOML file overriding the defaults")
+    q.add_argument("--force", action="store_true", help="replace an existing baseline file")
+    q.set_defaults(func=cmd_baseline_learn)
+    q = bl.add_parser("show", help="print the learned device profiles")
+    q.add_argument("--json", action="store_true", help="print the raw JSON file")
+    q.set_defaults(func=cmd_baseline_show)
+    for q in bl.choices.values():
+        q.add_argument("--baseline", default=DEFAULT_BASELINE, metavar="JSON",
+                       help=f"baseline file (default {DEFAULT_BASELINE})")
 
     p = sub.add_parser("dashboard", help="serve the web dashboard")
     p.add_argument("--db", default=DEFAULT_DB)

@@ -2,58 +2,86 @@
 
 All rules live in [`iotmon/detections.py`](../iotmon/detections.py). Their
 thresholds are in [`iotmon/default.toml`](../iotmon/default.toml) and can be
-overridden with `--config my.toml`.
+overridden with `--config my.toml`. The design rationale and the test
+scenarios are in the [Week 3 write-up](03-detection-engine.md).
 
 Design principles:
 
+* **Thresholds over time windows, not "if port == X".** Every rule counts
+  something (ports, hosts, connections, failures, bytes) inside a window
+  and compares it with a threshold. Where it makes sense, that threshold
+  comes from the device's own learned behaviour.
 * **Packet time, not wall-clock time.** Every window uses packet timestamps,
   so replaying a pcap produces exactly the alerts a live run would have.
+* **A frozen baseline.** Behaviour is learned during a learning period (or
+  from a trusted capture) and then only compared against. An attack never
+  becomes part of "normal".
 * **One state machine per rule**, fed one packet at a time, with bounded memory
   (sliding windows, capped history).
 * **Cooldowns** stop one ongoing event from producing hundreds of alerts.
 * **Each rule owns one question.** A port scan also produces many refused
-  connections, but the failed-connection rule only counts failures against the
-  *same* service. Scans stay the scan rule's job, and one event raises one alert.
-* **Zero alerts on the baseline is a tested requirement**
-  (`tests/test_end_to_end.py::test_baseline_is_quiet`).
+  connections and a high connection rate. The failed-connection rule only
+  counts failures against the *same* service, and the connection-rate rule
+  stays quiet for a source already flagged as scanning.
+* **Zero alerts on the baseline, and on activity just under the thresholds,
+  are tested requirements** (`test_baseline_is_quiet`,
+  `near-miss-below-thresholds` scenario).
 
-| Rule | Severity | ATT&CK (Enterprise / ICS) |
-|---|---|---|
-| `port_scan` | high (scan/sweep), medium (ARP sweep) | T1046 Network Service Discovery, T1018 Remote System Discovery / T0846 |
-| `new_device` | medium | T1200 Hardware Additions / T0848 Rogue Master |
-| `traffic_spike` | high | T1498 Network Denial of Service / T0814 |
-| `suspicious_port` | per port (medium to critical) | T1021 Remote Services / T0886 |
-| `failed_connections` | medium (refused), high (MQTT auth) | T1110 Brute Force / T0812 Default Credentials |
-| `device_change` | high (IP conflict), low (IP change) | T1557.002 ARP Cache Poisoning, T1036 Masquerading / T0830 Adversary-in-the-Middle |
+| ID | Rule | Severity | ATT&CK (Enterprise / ICS) |
+|---|---|---|---|
+| **DET-001** | `new_device` | medium | T1200 Hardware Additions / T0848 Rogue Master |
+| **DET-002** | `port_scan` | high (scan/sweep), medium (ARP sweep) | T1046 Network Service Discovery, T1018 Remote System Discovery / T0846 |
+| **DET-003** | `connection_rate` | medium | T1499 Endpoint Denial of Service / T0814 |
+| **DET-004** | `suspicious_port` | medium (outside baseline), per port up to critical (high-risk service) | T1021 Remote Services / T0886 |
+| **DET-005** | `external_connection` | medium, high (local-only device, direct-to-IP, fan-out) | T1071 Application Layer Protocol / T0869 |
+| DET-006 | `traffic_spike` | high | T1498 Network Denial of Service / T0814 |
+| DET-007 | `failed_connections` | medium (refused), high (MQTT auth) | T1110 Brute Force / T0812 Default Credentials |
+| DET-008 | `device_change` | high (IP conflict), low (IP change) | T1557.002 ARP Cache Poisoning, T1036 Masquerading / T0830 Adversary-in-the-Middle |
+
+DET-001 to DET-005 are the core rules. DET-006 to DET-008 add evidence to
+the same incidents: volume, brute force, address spoofing.
+
+Every alert is written to `alerts.jsonl` as an evidence record:
+
+```json
+{"timestamp": "2026-10-07T10:35:10.280Z", "rule": "DET-002", "rule_name": "port_scan", "severity": "HIGH",
+ "source_ip": "192.168.1.66", "destination_ip": "192.168.1.22",
+ "description": "Port scan: 192.168.1.66 probed 15 ports on 192.168.1.22",
+ "mitre": "T1046 Network Service Discovery / ICS T0846",
+ "ports_observed": 15, "sample_ports": [21, 22, 23, 25, 53, 80, 81, 110, 111, 135, 139, 143, 443, 445, 554],
+ "window_s": 60.0, "threshold": 15}
+```
 
 ---
 
-## `port_scan`
+## The behavioural baseline
 
-**Logic.** Per source, keep a 60 s sliding window of probes. A probe is a TCP
-SYN without ACK, or a UDP packet sent *to* a service port. Three patterns:
+DET-003, DET-004 and DET-005 compare traffic with a per-device profile
+([`iotmon/baseline.py`](../iotmon/baseline.py)):
 
-| Pattern | Condition (defaults) |
-|---|---|
-| Vertical scan | ≥ 15 distinct ports on one host |
-| Horizontal sweep | the same port on ≥ 8 distinct hosts |
-| ARP sweep | ARP requests for ≥ 12 distinct addresses |
+| Field | Learned from | Used by |
+|---|---|---|
+| `client_ports` | service ports of conversations the device opened | DET-004 |
+| `server_ports` | service ports the device answered on | DET-004 |
+| `external_peers` | internet hosts the device opened conversations to | DET-005 |
+| `peak_connections` | most connection attempts it made in any 60 s window | DET-003 |
 
-**Why it works on IoT.** Normal IoT devices talk to a handful of fixed peers
-on one or two ports. Fifteen ports in a minute has no legitimate place on the
-network except during an authorised vulnerability scan.
+**Learning.** Without `--baseline`, the first 120 s of every capture are the
+learning period (`[baseline] learning_period_s`). With `--baseline FILE`, a
+missing file is learned the same way and saved; an existing file is loaded
+and frozen. `iotmon baseline learn trusted.pcap` learns from a whole capture
+you trust, which is the right choice for a real deployment: two minutes do
+not cover a nightly backup or a weekly firmware check.
 
-**False positives.** Vulnerability scanners and asset-discovery tools (allow
-them by source in a future allowlist), and NMS polling many hosts on SNMP/161
-(horizontal). UDP replies from servers (DNS answers going to many ephemeral
-ports) are excluded by the "sent *to* a service port" rule. This is covered by
-`test_dns_server_replies_are_not_a_scan`.
+**Limits.** Profiles are keyed by IP: fine for statically addressed OT
+devices, and address changes are DET-008's job. Devices first seen after the
+learning period have no profile. DET-001 reports them, and DET-004/005 then
+fall back to their non-baseline checks (the high-risk port list, and "no
+baseline" as a DET-005 reason). Behaviour that only happens rarely, and not
+during the baseline, will alert once. That is intended, because on a static
+network a new behaviour is worth a look.
 
-**Evasion / limits.** Slow scans (one port every 10 s) stay under the window.
-This is tested and documented as a known gap. A longer second window with a
-higher threshold would catch them.
-
-## `new_device`
+## DET-001 `new_device`
 
 **Logic.** The inventory reports the first packet from an unseen MAC (or IP
 when there is no Ethernet header). With an **asset register** loaded
@@ -73,28 +101,129 @@ replaced sensor.
 asset register with `iotmon inventory learn` from trusted traffic instead of
 relying on the learning period.
 
-## `device_change`
+## DET-002 `port_scan`
 
-**Logic.** Watches the binding between MAC and IP addresses.
-*IP conflict* (high): an IP already bound to one MAC is used by a different
-MAC, as a sender in an ARP reply or as the source of an IP packet. That is
-what ARP spoofing looks like from a SPAN port: the attacker announces "the
-gateway's IP is at my MAC". *IP change* (low): a known MAC appears on a new
-IP, either within the capture or compared with the asset register.
+**Logic.** Per source, keep a 60 s sliding window of probes. A probe is a TCP
+SYN without ACK, or a UDP packet sent *to* a service port. Three patterns:
 
-**Why it works on IoT/OT.** OT devices are mostly statically addressed, so
-address changes are rare, and a second MAC for a PLC's or broker's IP is
-either a man-in-the-middle or a misconfiguration that will break the process
-anyway.
+| Pattern | Condition (defaults) | Evidence |
+|---|---|---|
+| Vertical scan | ≥ 15 distinct ports on one host | `ports_observed`, `sample_ports` |
+| Horizontal sweep | the same port on ≥ 8 distinct hosts | `hosts_observed` |
+| ARP sweep | ARP requests for ≥ 12 distinct addresses | `addresses_observed` |
 
-**False positives.** DHCP renewals (hence low severity for changes). A
-device that moved keeps its old IP binding for the rest of the run, so a new
-device reusing that address raises a conflict. Traffic routed from another
-subnet carries the router's MAC, so monitor one layer-2 segment per sensor.
-Validated live in the Docker lab with gratuitous ARP
-([lab guide](lab-setup.md#asset-register-week-2)).
+**Why these numbers.** Normal IoT devices talk to a handful of fixed peers
+on one or two ports. In the baseline the busiest device (the camera) touches
+4 service ports in total, so 15 distinct ports on *one* host in a minute
+leaves a wide margin. The near-miss scenario probes 12 ports and stays
+silent.
 
-## `traffic_spike`
+**False positives.** Vulnerability scanners and asset-discovery tools (allow
+them by source in a future allowlist), and NMS polling many hosts on SNMP/161
+(horizontal). UDP replies from servers (DNS answers going to many ephemeral
+ports) are excluded by the "sent *to* a service port" rule. This is covered by
+`test_dns_server_replies_are_not_a_scan`.
+
+**Evasion / limits.** Slow scans (one port every 10 s) stay under the window.
+This is tested and documented as a known gap. A longer second window with a
+higher threshold would catch them.
+
+## DET-003 `connection_rate`
+
+**Logic.** Count connection *attempts* per source device in a 60 s sliding
+window: a TCP SYN, or the first packet of a new UDP conversation. Alert when
+
+```
+attempts >= max(min_connections, peak_factor × learned peak)       defaults: 20, 5×
+```
+
+The learned peak is the device's busiest 60 s during the baseline.
+
+**Why both terms.** The floor (20) stops devices with a near-zero baseline
+from alerting on a handful of reconnects. A sensor with one persistent MQTT
+session has a peak of 0 or 1, and 5× that is meaningless. The factor makes
+busy devices (a gateway, a camera polling many services) alert relative to
+their own normal, not a global number. In the sample capture the camera's
+peak is 4, so it would need 20; a device with a peak of 10 would need 50.
+
+**What it catches that the others miss.** A reconnect storm or flood against
+*one* service: same peer, same port, valid credentials. There is no scan (one
+port), no failure (connections succeed), and too little volume for DET-006.
+This is how a crashed firmware loop, a misconfigured client or an
+application-layer DoS against a PLC or broker looks.
+
+**Deferring to DET-002.** A scan is also a burst of attempts. Sources that
+DET-002 flagged within `scan_suppress_s` (300 s) are not reported again here.
+
+**False positives.** Legitimate bursts the baseline did not see: a device
+reboot reconnecting many sessions, a mass firmware rollout. Learn the
+baseline over a longer trusted capture.
+
+## DET-004 `suspicious_port`: communication with unusual ports
+
+**Logic.** Only **established** sessions count: the client completed the TCP
+handshake (its ACK after the SYN-ACK), or a UDP service replied. Half-open
+probes and refused attempts are DET-002's and DET-007's. The port is unusual
+if either is true:
+
+1. **Outside the device's baseline:** the client never connected to this port,
+   or the server never answered on it, during the learning period (medium).
+   This is the main check, and it needs no port list: the temperature sensor
+   that only ever spoke MQTT opening HTTP to the camera is unusual, even though
+   HTTP is a normal protocol.
+2. **High-risk service**, baseline or not: ports with no business on an IoT
+   network. Severity per port:
+
+| Port | Service | Severity | Why |
+|---|---|---|---|
+| 23, 2323 | Telnet | high | Cleartext logins; the Mirai botnet's entry point |
+| 21 | FTP | medium | Cleartext credentials |
+| 69 | TFTP | medium | Unauthenticated firmware/config transfer |
+| 445 / 3389 | SMB / RDP | medium | IT lateral movement into OT |
+| 5555 | ADB | high | Root shell on Android-based devices |
+| 7547 | TR-069 | medium | Remote management; mass-exploited in 2016 |
+| 4444 | Metasploit default | critical | Default handler port |
+| 6667 | IRC | critical | Classic botnet command-and-control |
+
+The list sets *how bad* an established session is; the baseline decides
+whether a session on any other port is unusual at all. The evidence lists the
+reasons and the device's usual ports. Extra check: **plaintext MQTT (1883) to
+a public IP address** is a medium alert, because telemetry and credentials
+are leaving the site unencrypted.
+
+**Note** the alert is useful in both directions. "Admin → camera:23" tells you
+the camera *exposes* Telnet. "Camera → internet:6667" tells you the camera is
+*doing* something it never should.
+
+## DET-005 `external_connection`: unexpected external connection
+
+**Logic.** A lab device opens a conversation to an **external** address: not
+in `lab_networks`, not in `internal_networks` (RFC 1918 by default), and not
+multicast, broadcast, link-local or loopback. It is unexpected if the
+address is not among the device's learned `external_peers`.
+
+| Condition | Severity |
+|---|---|
+| Device talked to the internet during the baseline, address resolved by DNS in the last 10 min | medium |
+| Device **never** talked to the internet during the baseline (local-only sensor) | high |
+| No DNS answer gave the device this address (**direct-to-IP**, typical of malware) | high |
+| ≥ 10 distinct unexpected hosts in 300 s (**fan-out**) | high, one alert |
+
+Per device, at most 3 individual hosts are reported per 300 s before the
+fan-out alert takes over, so a device spraying the internet produces 4
+alerts, not 400.
+
+**Why DNS correlation.** The monitor records which addresses each device
+received in DNS answers. Legitimate IoT cloud traffic almost always starts
+with a lookup (`api.smartplug.example` → 203.0.113.50). Bots often connect
+to hard-coded IPs. The DNS name is also the best evidence an analyst can get
+for encrypted traffic.
+
+**False positives.** Cloud services behind CDNs or rotating address pools
+(a new IP for the same name). The DNS name in the evidence makes these quick
+to triage. A future version could allow by domain instead of by address.
+
+## DET-006 `traffic_spike`
 
 **Logic.** For every local IP, separately for transmit and receive: sum bytes
 and packets per 10 s bucket. When a bucket closes, compare it with that
@@ -117,32 +246,7 @@ going from 300 to 900 bytes.
 These are real changes in behaviour, and worth knowing about on a static
 network.
 
-## `suspicious_port`
-
-**Logic.** Alert when a session is **established** (a SYN-ACK is seen) on a
-port with no business on an IoT network. A bare SYN is not enough, because
-attempts against closed ports are the scan rule's job. Default list (edit in
-the config):
-
-| Port | Service | Severity | Why |
-|---|---|---|---|
-| 23, 2323 | Telnet | high | Cleartext logins; the Mirai botnet's entry point |
-| 21 | FTP | medium | Cleartext credentials |
-| 69 | TFTP | medium | Unauthenticated firmware/config transfer |
-| 445 / 3389 | SMB / RDP | medium | IT lateral movement into OT |
-| 5555 | ADB | high | Root shell on Android-based devices |
-| 7547 | TR-069 | medium | Remote management; mass-exploited in 2016 |
-| 4444 | Metasploit default | critical | Default handler port |
-| 6667 | IRC | critical | Classic botnet command-and-control |
-
-Extra check: **plaintext MQTT (1883) to a public IP address** is a medium
-alert, because telemetry and credentials are leaving the site unencrypted.
-
-**Note** the alert is useful in both directions. "Admin → camera:23" tells you
-the camera *exposes* Telnet. "Camera → internet:6667" tells you the camera is
-*doing* something it never should.
-
-## `failed_connections`
+## DET-007 `failed_connections`
 
 **Logic.** Track every outstanding SYN. A failure is:
 
@@ -163,6 +267,27 @@ monitor sees authentication failures without any broker logs. With MQTT over
 TLS this signal moves to the broker's log, a good argument for pulling broker
 logs into the pipeline later.
 
+## DET-008 `device_change`
+
+**Logic.** Watches the binding between MAC and IP addresses.
+*IP conflict* (high): an IP already bound to one MAC is used by a different
+MAC, as a sender in an ARP reply or as the source of an IP packet. That is
+what ARP spoofing looks like from a SPAN port: the attacker announces "the
+gateway's IP is at my MAC". *IP change* (low): a known MAC appears on a new
+IP, either within the capture or compared with the asset register.
+
+**Why it works on IoT/OT.** OT devices are mostly statically addressed, so
+address changes are rare, and a second MAC for a PLC's or broker's IP is
+either a man-in-the-middle or a misconfiguration that will break the process
+anyway.
+
+**False positives.** DHCP renewals (hence low severity for changes). A
+device that moved keeps its old IP binding for the rest of the run, so a new
+device reusing that address raises a conflict. Traffic routed from another
+subnet carries the router's MAC, so monitor one layer-2 segment per sensor.
+Validated live in the Docker lab with gratuitous ARP
+([lab guide](lab-setup.md#asset-register-week-2)).
+
 ---
 
 ## Validating the rules
@@ -170,24 +295,29 @@ logs into the pipeline later.
 | Evidence | How |
 |---|---|
 | Unit tests per rule, positive *and* negative cases | `pytest tests/test_detections.py` |
+| One controlled scenario per core rule, plus a near miss, each triggering exactly its rules | `python tools/run_scenarios.py`, `pytest tests/test_scenarios.py` |
 | Full kill chain on the sample capture, exact alert list | `pytest tests/test_end_to_end.py` |
 | Five minutes of normal traffic raise zero alerts | `test_baseline_is_quiet` |
-| Live, against real containers | `suspicious_port` fired on a single Telnet connection to the lab camera; baseline lab traffic raised no alerts (see the [lab guide](lab-setup.md)) |
+| Live, against real containers | `python tools/lab_scenarios.py` ([lab guide](lab-setup.md#detection-scenarios-week-3)) |
 
 Sample capture result:
 
 ```
-10:35:00  [ALERT MEDIUM]   new_device: New IoT device detected: 192.168.1.66 (Raspberry Pi Foundation)
-10:35:00  [ALERT MEDIUM]   port_scan: ARP sweep from 192.168.1.66
-10:35:10  [ALERT HIGH]     suspicious_port: TELNET session 192.168.1.66 -> 192.168.1.22:23
-10:35:10  [ALERT HIGH]     port_scan: Port scan: 192.168.1.66 probed 15 ports on 192.168.1.22
-10:35:52  [ALERT MEDIUM]   failed_connections: Repeated failed connections: 192.168.1.66 -> 192.168.1.21:23 (10x)
-10:36:06  [ALERT HIGH]     failed_connections: MQTT authentication failures: 192.168.1.66 refused 5x by broker 192.168.1.10
-10:36:35  [ALERT CRITICAL] suspicious_port: IRC session 192.168.1.22 -> 198.51.100.23:6667
-10:36:50  [ALERT HIGH]     traffic_spike: Traffic spike: 192.168.1.22 sent 591,031 bytes in 10s (baseline 9,027)
+10:35:00  [ALERT MEDIUM]   DET-001 new_device: New IoT device detected: 192.168.1.66 (Raspberry Pi Foundation)
+10:35:00  [ALERT MEDIUM]   DET-002 port_scan: ARP sweep from 192.168.1.66
+10:35:10  [ALERT HIGH]     DET-002 port_scan: Port scan: 192.168.1.66 probed 15 ports on 192.168.1.22
+10:35:30  [ALERT HIGH]     DET-004 suspicious_port: TELNET session 192.168.1.66 -> 192.168.1.22:23
+10:35:52  [ALERT MEDIUM]   DET-007 failed_connections: Repeated failed connections: 192.168.1.66 -> 192.168.1.21:23 (10x)
+10:36:06  [ALERT HIGH]     DET-007 failed_connections: MQTT authentication failures: 192.168.1.66 refused 5x by broker 192.168.1.10
+10:36:35  [ALERT MEDIUM]   DET-005 external_connection: Unexpected external connection: 192.168.1.22 -> 198.51.100.23:6667 (cnc.badbot.example)
+10:36:35  [ALERT CRITICAL] DET-004 suspicious_port: IRC session 192.168.1.22 -> 198.51.100.23:6667
+10:36:40  [ALERT HIGH]     DET-005 external_connection: Unexpected external connection: 192.168.1.22 -> 198.51.100.77:53
+10:36:40  [ALERT MEDIUM]   DET-003 connection_rate: Abnormal connection rate: 192.168.1.22 opened 20 connections in 60s (baseline peak 4)
+10:36:50  [ALERT HIGH]     DET-006 traffic_spike: Traffic spike: 192.168.1.22 sent 591,031 bytes in 10s (baseline 9,027)
 ```
 
 Read top to bottom, this is the incident timeline: a rogue device joins,
-discovers hosts, finds Telnet on the camera, gets refused by the plug, tries
-to guess MQTT credentials, and then the camera starts acting like a bot
-(C2 check-in, flood).
+discovers hosts, scans the camera, logs in over Telnet, gets refused by the
+plug, tries to guess MQTT credentials. Then the camera starts acting like a
+bot: it resolves and joins an IRC C2 server, and floods an external host
+by IP, visible as a new destination, a connection burst and a volume spike.

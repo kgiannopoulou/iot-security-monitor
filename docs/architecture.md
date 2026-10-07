@@ -3,8 +3,8 @@
 ```
   pcap file ──┐                      ┌──▶ Inventory   (devices: MAC, vendor, role, connections) ◀─▶ inventory.json
               ├─▶ capture ─▶ parser ─┼──▶ FlowTable   (bidirectional conversations)
-  interface ──┘   (scapy)  (Packet-  ├──▶ Detection   (6 rules, packet-time windows) ──▶ alerts
-                            Record)  │      Engine
+  interface ──┘   (scapy)  (Packet-  ├──▶ Detection   (DET-001..008, packet-time windows) ──▶ alerts
+                            Record)  │      Engine  ◀─▶ Baseline (per-device behaviour) ◀─▶ baseline.json
                                      └──▶ Printer     (terminal table + coloured alerts)
                                                 │
                                    Storage ◀────┘  SQLite (alerts, devices, flows, traffic/min)
@@ -20,15 +20,16 @@
 |---|---|
 | `capture.py` | `read_pcap()` and `sniff_live()`. Both yield `PacketRecord`s, so everything downstream is identical for replay and live capture. Live capture runs scapy's `AsyncSniffer` in its own thread and hands packets over through a queue. |
 | `parser.py` | scapy packet → `PacketRecord`: link, network, transport, application. Decodes MQTT (CONNECT/CONNACK/PUBLISH/SUBSCRIBE), DNS, HTTP, NTP, ICMP, and labels TLS as encrypted. Never raises on malformed payloads. |
-| `models.py` | `PacketRecord`, `Alert`, the known-services table, the service-port rule. |
+| `models.py` | `PacketRecord`, `Alert` (and its evidence-record JSON form), the rule-ID catalogue, the known-services table, the service-port rule. |
 | `flows.py` | Groups packets into client→server flows with idle expiry and TCP state (ESTABLISHED / CLOSED / REJECTED / NO-REPLY). |
 | `inventory.py` | Passive asset inventory: MAC-keyed devices, OUI vendor lookup, role inference from offered services and MQTT behaviour, connection counts, MAC/IP binding changes. |
 | `assets.py` | Persistent asset register (`data/inventory.json`): known devices keyed by MAC with status approved / pending, merged after each run (replay-safe), saved every 30 s during live capture. See [Week 2](02-device-inventory.md). |
-| `detections.py` | `DetectionEngine` plus six `Detector` subclasses. See [detection-rules.md](detection-rules.md). |
+| `baseline.py` | Behavioural baseline (`data/baseline.json`): per device, the ports it uses and serves, its internet peers and its peak connection rate. Learned during the learning period or from a trusted capture, then frozen. See [Week 3](03-detection-engine.md). |
+| `detections.py` | `DetectionEngine` plus eight `Detector` subclasses (DET-001 to DET-008). The engine tells each detector whether the packet opened a connection and whether the baseline is still learning, and remembers which rules fired for which source. See [detection-rules.md](detection-rules.md). |
 | `storage.py` | SQLite in WAL mode (writer and dashboard reader coexist), JSONL alerts for SIEM ingestion, optional CSV. Writes are batched and committed every 2 s. |
 | `pipeline.py` | `Monitor`: wires the stages together and flushes state on exit. |
 | `dashboard/` | Flask app plus one HTML page. JSON API (`/api/summary`, `/api/alerts`, `/api/devices`, `/api/traffic`, `/api/flows`); the page polls it every 5 s. |
-| `cli.py` | `read`, `live`, `report`, `inventory` (learn / show / approve), `dashboard` sub-commands. |
+| `cli.py` | `read`, `live`, `report`, `inventory` (learn / show / approve), `baseline` (learn / show), `dashboard` sub-commands. |
 
 ## Key decisions
 
@@ -56,10 +57,12 @@ ranges.
 
 | Table | Contents |
 |---|---|
-| `alerts` | ts, rule, severity, title, src, dst, mitre, details (JSON) |
+| `alerts` | ts, rule, rule_id (DET-xxx), severity, title, src, dst, mitre, details (JSON) |
 | `devices` | key (MAC), ips, vendor, name, role, first/last seen, packet/byte counters, protocols, services |
 | `flows` | 5-tuple, app, first/last seen, duration, packets, bytes per direction, state |
 | `traffic` | per minute × application protocol: packets, bytes (feeds the chart) |
 
-`alerts.jsonl` has one alert per line with an ISO-8601 `time` field, ready
-for Filebeat / Wazuh / Splunk ingestion.
+`alerts.jsonl` has one evidence record per line (`timestamp`, `rule`
+DET-xxx, `severity`, `source_ip`, `destination_ip`, `description`, `mitre`,
+then the rule's own evidence fields such as `ports_observed`), ready for
+Filebeat / Wazuh / Splunk ingestion.

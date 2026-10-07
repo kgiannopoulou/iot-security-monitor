@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS alerts (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     ts        REAL NOT NULL,
     rule      TEXT NOT NULL,
+    rule_id   TEXT,
     severity  TEXT NOT NULL,
     title     TEXT NOT NULL,
     src       TEXT,
@@ -93,6 +94,9 @@ class Storage:
         for col, kind in (("connections", "INTEGER"), ("status", "TEXT")):
             if col not in cols:
                 self.db.execute(f"ALTER TABLE devices ADD COLUMN {col} {kind}")
+        # ... and their alerts lack the Week 3 rule IDs.
+        if "rule_id" not in {r[1] for r in self.db.execute("PRAGMA table_info(alerts)")}:
+            self.db.execute("ALTER TABLE alerts ADD COLUMN rule_id TEXT")
 
         self.out_dir = Path(out_dir) if out_dir else self.db_path.parent
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -115,8 +119,9 @@ class Storage:
 
     def alert(self, alert: Alert) -> None:
         self.db.execute(
-            "INSERT INTO alerts (ts, rule, severity, title, src, dst, mitre, details) VALUES (?,?,?,?,?,?,?,?)",
-            (alert.ts, alert.rule, alert.severity, alert.title, alert.src, alert.dst,
+            "INSERT INTO alerts (ts, rule, rule_id, severity, title, src, dst, mitre, details)"
+            " VALUES (?,?,?,?,?,?,?,?,?)",
+            (alert.ts, alert.rule, alert.rule_id, alert.severity, alert.title, alert.src, alert.dst,
              alert.mitre, json.dumps(alert.details)),
         )
         self._alerts_jsonl.write(json.dumps(alert.as_dict()) + "\n")

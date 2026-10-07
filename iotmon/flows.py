@@ -87,6 +87,10 @@ class FlowTable:
         else:
             key = (rec.protocol, rec.src_ip, rec.sport, rec.dst_ip, rec.dport)
             from_client = True
+            # Same port on both ends (NTP 123 <-> 123): the reply to an open flow.
+            reverse = (rec.protocol, rec.dst_ip, rec.dport, rec.src_ip, rec.sport)
+            if key not in self.active and reverse in self.active:
+                key, from_client = reverse, False
 
         flow = self.active.get(key)
         if flow is None:

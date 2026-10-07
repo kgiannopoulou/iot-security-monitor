@@ -1,0 +1,146 @@
+# Week 3 live scenarios in the Docker lab, 2026-10-07 (python tools/lab_scenarios.py)
+
+## Run 1: default monitor config
+
+== det-001-new-device: Unknown Raspberry Pi joins and connects to the broker
+   connected to the broker once
+   07:31:00  DET-001  MEDIUM   New IoT device detected: 172.28.0.66 (Raspberry Pi Foundation)
+== det-002-port-scan: Same Pi connect-scans 30 ports on the broker
+   scanned 30 ports, open: [1883]
+   07:31:11  DET-002  HIGH     Port scan: 172.28.0.66 probed 15 ports on 172.28.0.10
+== det-003-connection-flood: Sensor opens 30 broker connections in ~10 s
+   opened 30 connections to the broker
+   07:31:28  DET-003  MEDIUM   Abnormal connection rate: 172.28.0.20 opened 20 connections in 60s (baseline peak 1)
+== det-004-unusual-port: Sensor opens camera HTTP, then Telnet
+   camera web UI: HTTP 200
+   telnet: b'Login incorrect\r\ncamera login: '
+   07:31:41  DET-004  MEDIUM   Unusual port: 172.28.0.20 -> 172.28.0.22:80 (HTTP), outside the baseline
+   07:31:41  DET-004  HIGH     TELNET session 172.28.0.20 -> 172.28.0.22:23
+== det-005-external-connection: Local-only sensor dials 198.51.100.23 (TTL 1)
+   connect 198.51.100.23:8883 -> errno 113
+   connect 198.51.100.23:8883 -> errno 113
+   07:31:53  DET-001  MEDIUM   New IoT device detected: 172.28.0.1 (locally administered (virtual / randomised))
+   07:31:53  DET-005  HIGH     Unexpected external connection: 172.28.0.20 -> 198.51.100.23:8883
+
+SCENARIO                       EXPECTED   FIRED      ALERTS  RESULT
+det-001-new-device             DET-001    DET-001         1  PASS
+det-002-port-scan              DET-002    DET-002         1  PASS
+det-003-connection-flood       DET-003    DET-003         1  PASS
+det-004-unusual-port           DET-004    DET-004         2  PASS
+det-005-external-connection    DET-005    DET-001, DET-005      2  FAIL
+
+4/5 live scenarios passed
+
+## Run 2: clean lab, lab/monitor.toml lists the Docker gateway 172.28.0.1 as a known device
+
+== det-001-new-device: Unknown Raspberry Pi joins and connects to the broker
+   connected to the broker once
+   07:34:57  DET-001  MEDIUM   New IoT device detected: 172.28.0.66 (Raspberry Pi Foundation)
+== det-002-port-scan: Same Pi connect-scans 30 ports on the broker
+   scanned 30 ports, open: [1883]
+   07:35:08  DET-002  HIGH     Port scan: 172.28.0.66 probed 15 ports on 172.28.0.10
+== det-003-connection-flood: Sensor opens 30 broker connections in ~10 s
+   opened 30 connections to the broker
+   07:35:25  DET-003  MEDIUM   Abnormal connection rate: 172.28.0.20 opened 20 connections in 60s (baseline peak 1)
+== det-004-unusual-port: Sensor opens camera HTTP, then Telnet
+   camera web UI: HTTP 200
+   telnet: b'Login incorrect\r\ncamera login: '
+   07:35:38  DET-004  MEDIUM   Unusual port: 172.28.0.20 -> 172.28.0.22:80 (HTTP), outside the baseline
+   07:35:38  DET-004  HIGH     TELNET session 172.28.0.20 -> 172.28.0.22:23
+== det-005-external-connection: Local-only sensor dials 198.51.100.23 (TTL 1)
+   connect 198.51.100.23:8883 -> errno 113
+   connect 198.51.100.23:8883 -> errno 113
+   07:35:50  DET-005  HIGH     Unexpected external connection: 172.28.0.20 -> 198.51.100.23:8883
+
+SCENARIO                       EXPECTED           FIRED              ALERTS  RESULT
+det-001-new-device             DET-001            DET-001                 1  PASS
+det-002-port-scan              DET-002            DET-002                 1  PASS
+det-003-connection-flood       DET-003            DET-003                 1  PASS
+det-004-unusual-port           DET-004            DET-004                 2  PASS
+det-005-external-connection    DET-005            DET-005                 1  PASS
+
+5/5 live scenarios passed
+
+## All alerts in run 2, from the dashboard API (alert 1 is the known DET-006 start-up false positive, see roadmap)
+
+1 07:33:50 DET-006 HIGH Traffic spike: 172.28.0.22 sent 53,598 bytes in 10s (baseline 3,622)
+2 07:34:57 DET-001 MEDIUM New IoT device detected: 172.28.0.66 (Raspberry Pi Foundation)
+3 07:35:08 DET-002 HIGH Port scan: 172.28.0.66 probed 15 ports on 172.28.0.10
+4 07:35:25 DET-003 MEDIUM Abnormal connection rate: 172.28.0.20 opened 20 connections in 60s (baseline peak 1)
+5 07:35:38 DET-004 MEDIUM Unusual port: 172.28.0.20 -> 172.28.0.22:80 (HTTP), outside the baseline
+6 07:35:38 DET-004 HIGH TELNET session 172.28.0.20 -> 172.28.0.22:23
+7 07:35:50 DET-005 HIGH Unexpected external connection: 172.28.0.20 -> 198.51.100.23:8883
+
+## Learned baseline (data/lab/baseline.json)
+
+{
+  "learned_from": {
+    "start": "2026-10-07T07:32:47+00:00",
+    "end": "2026-10-07T07:34:47+00:00",
+    "packets": 276
+  },
+  "window_s": 60.0,
+  "devices": {
+    "172.28.0.5": {
+      "client_ports": [
+        80
+      ],
+      "server_ports": [],
+      "external_peers": [],
+      "peak_connections": 1
+    },
+    "172.28.0.10": {
+      "client_ports": [],
+      "server_ports": [
+        1883
+      ],
+      "external_peers": [],
+      "peak_connections": 0
+    },
+    "172.28.0.20": {
+      "client_ports": [
+        1883
+      ],
+      "server_ports": [],
+      "external_peers": [],
+      "peak_connections": 1
+    },
+    "172.28.0.21": {
+      "client_ports": [
+        53,
+        80,
+        1883
+      ],
+      "server_ports": [],
+      "external_peers": [],
+      "peak_connections": 3
+    },
+    "172.28.0.22": {
+      "client_ports": [
+        53,
+        80
+      ],
+      "server_ports": [
+        80
+      ],
+      "external_peers": [],
+      "peak_connections": 4
+    },
+    "172.28.0.30": {
+      "client_ports": [],
+      "server_ports": [
+        80
+      ],
+      "external_peers": [],
+      "peak_connections": 0
+    },
+    "172.28.0.53": {
+      "client_ports": [],
+      "server_ports": [
+        53
+      ],
+      "external_peers": [],
+      "peak_connections": 0
+    }
+  }
+}

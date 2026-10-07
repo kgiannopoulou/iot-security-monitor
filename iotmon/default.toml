@@ -5,9 +5,23 @@
 # Addresses inside these networks are treated as lab devices (inventory,
 # spike baselines). Everything else is a remote peer.
 lab_networks = ["192.168.1.0/24", "172.28.0.0/24"]
+# Private ranges outside the lab (other VLANs, the IT network). Peers here are
+# not "external" for DET-005; everything else that is routable is.
+internal_networks = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"]
+
+[baseline]
+# Behavioural baseline used by DET-003/004/005: per device, the ports it uses
+# and serves, its internet peers and its peak connection rate. Learned during
+# the first N seconds of a capture, unless loaded with --baseline FILE (build
+# one from trusted traffic with `iotmon baseline learn`).
+learning_period_s = 120
 
 [flows]
 idle_timeout_s = 60
+
+# Rule IDs: DET-001 new_device, DET-002 port_scan, DET-003 connection_rate,
+# DET-004 suspicious_port, DET-005 external_connection, DET-006 traffic_spike,
+# DET-007 failed_connections, DET-008 device_change.
 
 [detections.port_scan]
 enabled = true
@@ -29,6 +43,22 @@ ip_change_severity = "low"  # known MAC on a new IP (DHCP churn is the usual cau
 learning_period_s = 0       # IP conflicts (two MACs, one IP) are always high
 cooldown_s = 300
 
+[detections.connection_rate]
+enabled = true
+window_s = 60
+min_connections = 20        # never alert below this many new connections per window
+peak_factor = 5.0           # ... or below 5x the device's busiest baseline window
+scan_suppress_s = 300       # a source flagged by port_scan is not re-flagged here
+cooldown_s = 300
+
+[detections.external_connection]
+enabled = true
+dns_window_s = 600          # an address the device resolved this recently counts as looked up
+fanout_window_s = 300
+fanout_threshold = 10       # distinct unexpected internet hosts -> one high fan-out alert
+host_alerts = 3             # per-host alerts per device and window before that
+cooldown_s = 600
+
 [detections.traffic_spike]
 enabled = true
 bucket_s = 10
@@ -43,8 +73,9 @@ cooldown_s = 300
 [detections.suspicious_port]
 enabled = true
 cooldown_s = 600
+unusual_severity = "medium" # established session on a port outside the device's baseline
 
-# port -> severity, alerted when a session is actually established
+# port -> severity: alerted whenever a session is established, baseline or not
 [detections.suspicious_port.ports]
 21 = "medium"     # FTP, cleartext credentials
 23 = "high"       # Telnet, Mirai's favourite

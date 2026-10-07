@@ -108,9 +108,16 @@ class Device:
         }
 
 
+# Private address space: not the monitored lab, but not "the internet" either
+# (other site VLANs, the IT network). Override with network.internal_networks.
+DEFAULT_INTERNAL = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"]
+
+
 class Inventory:
-    def __init__(self, lab_networks: list[str]):
+    def __init__(self, lab_networks: list[str], internal_networks: list[str] | None = None):
         self.networks = [ipaddress.ip_network(n) for n in lab_networks]
+        self.internal = [ipaddress.ip_network(n) for n in
+                         (DEFAULT_INTERNAL if internal_networks is None else internal_networks)]
         self.devices: dict[str, Device] = {}
         self._by_ip: dict[str, str] = {}
         # Address changes caused by the last update(), read by the device_change rule:
@@ -130,6 +137,22 @@ class Inventory:
         if addr.is_multicast or addr.is_unspecified or str(addr).endswith(".255"):
             return False
         return any(addr in n for n in self.networks)
+
+    def is_external(self, ip: str | None) -> bool:
+        """A routable address outside the lab and the internal networks.
+
+        Documentation ranges (RFC 5737, used by the sample captures) count as
+        external; broadcast, multicast, link-local and loopback never do."""
+        if not ip or self.is_local(ip):
+            return False
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            return False
+        if (addr.is_multicast or addr.is_unspecified or addr.is_loopback or addr.is_link_local
+                or str(addr) == "255.255.255.255"):
+            return False
+        return not any(addr in n for n in self.internal if n.version == addr.version)
 
     def lookup(self, ip: str | None) -> Device | None:
         key = self._by_ip.get(ip or "")

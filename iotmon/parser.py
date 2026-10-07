@@ -111,6 +111,7 @@ def _parse_application(pkt: Packet, rec: PacketRecord) -> None:
         else:
             answers = [_text(rr.rdata) for rr in (dns.an or []) if getattr(rr, "type", None) in (1, 28)]  # A/AAAA
             rec.info = f"answer {name} -> {', '.join(answers) or 'no records'}"
+            rec.meta["dns_answers"] = answers
         rec.meta["dns_name"] = name
         return
 

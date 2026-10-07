@@ -53,20 +53,34 @@ def test_baseline_is_quiet(records):
 
 
 def test_every_attack_stage_is_detected(monitor):
-    titles = [a.title for a in monitor.alerts]
+    """The exact incident timeline, one alert per stage (rule ID, title prefix)."""
     expected = [
-        "New IoT device detected: 192.168.1.66",
-        "ARP sweep from 192.168.1.66",
-        "Port scan: 192.168.1.66",
-        "TELNET session 192.168.1.66 -> 192.168.1.22:23",
-        "Repeated failed connections: 192.168.1.66 -> 192.168.1.21:23",
-        "MQTT authentication failures: 192.168.1.66",
-        "IRC session 192.168.1.22 -> 198.51.100.23:6667",
-        "Traffic spike: 192.168.1.22 sent",
+        ("DET-001", "New IoT device detected: 192.168.1.66"),
+        ("DET-002", "ARP sweep from 192.168.1.66"),
+        ("DET-002", "Port scan: 192.168.1.66 probed 15 ports on 192.168.1.22"),
+        ("DET-004", "TELNET session 192.168.1.66 -> 192.168.1.22:23"),
+        ("DET-007", "Repeated failed connections: 192.168.1.66 -> 192.168.1.21:23"),
+        ("DET-007", "MQTT authentication failures: 192.168.1.66"),
+        ("DET-005", "Unexpected external connection: 192.168.1.22 -> 198.51.100.23:6667 (cnc.badbot.example)"),
+        ("DET-004", "IRC session 192.168.1.22 -> 198.51.100.23:6667"),
+        ("DET-005", "Unexpected external connection: 192.168.1.22 -> 198.51.100.77"),
+        ("DET-003", "Abnormal connection rate: 192.168.1.22"),
+        ("DET-006", "Traffic spike: 192.168.1.22 sent"),
     ]
-    for prefix in expected:
-        assert any(t.startswith(prefix) for t in titles), prefix
-    assert len(monitor.alerts) == len(expected)
+    got = [(a.rule_id, a.title) for a in monitor.alerts]
+    assert len(got) == len(expected), got
+    for (rule, title), (want_rule, prefix) in zip(got, expected):
+        assert rule == want_rule and title.startswith(prefix), (rule, title)
+
+
+def test_learned_baseline(monitor):
+    """What the first two minutes taught the monitor about each device."""
+    b = monitor.baseline
+    assert b.get("192.168.1.20").client_ports == {123, 1883}
+    assert b.get("192.168.1.21").external_peers == {"203.0.113.50"}
+    assert b.get("192.168.1.22").server_ports == {80}
+    assert b.get("192.168.1.22").external_peers == {"203.0.113.80"}
+    assert "192.168.1.66" not in b  # the rogue device arrives after the baseline
 
 
 def test_inventory(monitor):
@@ -87,7 +101,9 @@ def test_outputs_written(monitor):
     assert db.execute("SELECT COUNT(*) FROM flows WHERE app = 'MQTT'").fetchone()[0] > 0
     db.close()
     lines = (monitor.out / "alerts.jsonl").read_text().splitlines()
-    assert len(lines) == len(monitor.alerts) and "rule" in json.loads(lines[0])
+    assert len(lines) == len(monitor.alerts)
+    first = json.loads(lines[0])
+    assert (first["rule"], first["severity"], first["source_ip"]) == ("DET-001", "MEDIUM", "192.168.1.66")
     csv_lines = (monitor.out / "packets.csv").read_text().splitlines()
     assert len(csv_lines) == monitor.packets + 1
 

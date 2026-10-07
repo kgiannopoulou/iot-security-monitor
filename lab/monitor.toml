@@ -1,0 +1,12 @@
+# Site configuration for the monitor in the Docker lab (mounted read-only and
+# passed with --config). Only the keys set here override iotmon/default.toml.
+
+[network]
+lab_networks = ["172.28.0.0/24"]
+
+[detections.new_device]
+# The Docker bridge gateway is infrastructure, but it is silent until it has
+# to answer (e.g. an ICMP error for traffic it will not route), so it is
+# rarely seen during the learning period. Its MAC changes whenever the
+# network is recreated, hence the IP. Found by the Week 3 live DET-005 test.
+known_devices = ["172.28.0.1"]
