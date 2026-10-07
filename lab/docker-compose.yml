@@ -1,0 +1,81 @@
+# IoT lab: an MQTT broker, three simulated devices, a vendor "cloud", a DNS
+# server and an admin workstation on one bridge network, plus the monitor
+# sniffing that bridge and the dashboard reading the monitor's database.
+#
+#   cd lab && docker compose up -d --build
+#   dashboard: http://localhost:8080
+
+name: iot-lab
+
+networks:
+  iotlab:
+    driver: bridge
+    driver_opts:
+      # Fixed name for the host-side bridge so the monitor knows what to sniff.
+      com.docker.network.bridge.name: iotlab0
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+          gateway: 172.28.0.1
+
+x-device: &device
+  build: ./devices
+  restart: unless-stopped
+  depends_on: [broker, dns]
+
+services:
+  broker:
+    build: ./broker
+    restart: unless-stopped
+    networks: { iotlab: { ipv4_address: 172.28.0.10 } }
+    mac_address: "dc:a6:32:00:00:10"   # Raspberry Pi OUI
+
+  dns:
+    build: ./dns
+    restart: unless-stopped
+    networks: { iotlab: { ipv4_address: 172.28.0.53 } }
+
+  cloud:
+    <<: *device
+    environment: { ROLE: cloud }
+    networks: { iotlab: { ipv4_address: 172.28.0.30 } }
+
+  temp-sensor:
+    <<: *device
+    environment: { ROLE: temp_sensor, CLIENT_ID: temp-sensor-01 }
+    networks: { iotlab: { ipv4_address: 172.28.0.20 } }
+    mac_address: "24:0a:c4:00:00:20"   # Espressif OUI
+
+  smart-plug:
+    <<: *device
+    environment: { ROLE: smart_plug, CLIENT_ID: smart-plug-01 }
+    networks: { iotlab: { ipv4_address: 172.28.0.21 } }
+    mac_address: "24:0a:c4:00:00:21"
+
+  ip-camera:
+    <<: *device
+    environment: { ROLE: ip_camera }
+    networks: { iotlab: { ipv4_address: 172.28.0.22 } }
+    mac_address: "44:19:b6:00:00:22"   # Hikvision OUI
+
+  admin:
+    <<: *device
+    environment: { ROLE: admin }
+    networks: { iotlab: { ipv4_address: 172.28.0.5 } }
+
+  monitor:
+    build: ..
+    restart: unless-stopped
+    # Host network namespace = sees the iotlab0 bridge, i.e. every frame
+    # between containers (like a SPAN port on a physical switch).
+    network_mode: host
+    cap_add: [NET_RAW, NET_ADMIN]
+    command: ["live", "-i", "iotlab0", "-q", "--append", "--db", "/data/iotmon.db"]
+    volumes: ["../data/lab:/data"]
+
+  dashboard:
+    build: ..
+    restart: unless-stopped
+    command: ["dashboard", "--host", "0.0.0.0", "--db", "/data/iotmon.db"]
+    ports: ["127.0.0.1:8080:8080"]
+    volumes: ["../data/lab:/data"]

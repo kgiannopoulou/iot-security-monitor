@@ -1,0 +1,58 @@
+# Default monitor configuration. Override any value with --config my.toml;
+# only the keys you set are replaced.
+
+[network]
+# Addresses inside these networks are treated as lab devices (inventory,
+# spike baselines). Everything else is a remote peer.
+lab_networks = ["192.168.1.0/24", "172.28.0.0/24"]
+
+[flows]
+idle_timeout_s = 60
+
+[detections.port_scan]
+enabled = true
+window_s = 60
+vertical_threshold = 15     # distinct ports on one host
+horizontal_threshold = 8    # same port on distinct hosts
+arp_threshold = 12          # distinct ARP targets
+cooldown_s = 300
+
+[detections.new_device]
+enabled = true
+learning_period_s = 60      # devices seen in the first minute form the baseline
+known_devices = []          # MACs or IPs that never alert, e.g. ["b8:27:eb:12:34:56"]
+
+[detections.traffic_spike]
+enabled = true
+bucket_s = 10
+history_buckets = 30
+min_history = 6
+stddev_factor = 4.0
+min_ratio = 5.0             # also at least 5x the mean
+min_bytes = 50000           # ignore spikes below these absolute floors
+min_packets = 500
+cooldown_s = 300
+
+[detections.suspicious_port]
+enabled = true
+cooldown_s = 600
+
+# port -> severity, alerted when a session is actually established
+[detections.suspicious_port.ports]
+21 = "medium"     # FTP, cleartext credentials
+23 = "high"       # Telnet, Mirai's favourite
+69 = "medium"     # TFTP, firmware pulls
+445 = "medium"    # SMB
+2323 = "high"     # Telnet alternate (Mirai)
+3389 = "medium"   # RDP
+4444 = "critical" # Metasploit default handler
+5555 = "high"     # Android Debug Bridge
+6667 = "critical" # IRC, classic botnet C2
+7547 = "medium"   # TR-069 CWMP
+
+[detections.failed_connections]
+enabled = true
+window_s = 60
+threshold = 10              # failures to the same service
+mqtt_auth_threshold = 5     # refused MQTT CONNECTs
+syn_timeout_s = 5

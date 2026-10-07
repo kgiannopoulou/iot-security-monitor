@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IoT Security Monitor</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7;
+    --other: #b4b2a9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
+      --other: #5f5e5a;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
+    --other: #5f5e5a;
+  }
+  /* status colours are fixed in both modes and always paired with a label */
+  :root { --critical: #d03b3b; --serious: #ec835a; --warning: #fab219; --good: #0ca30c; }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 20px 24px 8px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
+  h1 { font-size: 20px; margin: 0; }
+  .sub { color: var(--ink-2); }
+  main { padding: 8px 24px 32px; display: grid; gap: 16px; grid-template-columns: repeat(12, 1fr); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
+  .card h2 { font-size: 13px; font-weight: 600; margin: 0 0 12px; color: var(--ink-2); text-transform: uppercase; letter-spacing: .04em; }
+  .tile { grid-column: span 3; }
+  .tile .v { font-size: 30px; font-weight: 600; }
+  .tile .l { color: var(--ink-2); }
+  .wide { grid-column: span 8; }
+  .narrow { grid-column: span 4; }
+  .full { grid-column: span 12; }
+  .chart { position: relative; height: 260px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 8px; color: var(--ink-2); font-size: 12px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--axis); padding: 6px 8px; }
+  td { border-bottom: 1px solid var(--grid); padding: 6px 8px; vertical-align: top; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.mono { white-space: nowrap; }
+  .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+  .scroll { overflow-x: auto; }
+  .sev { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
+  .sev::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+  .sev.critical { --c: var(--critical); } .sev.high { --c: var(--serious); }
+  .sev.medium { --c: var(--warning); } .sev.low { --c: var(--good); }
+  .sev .ico { font-size: 11px; }
+  .bars { display: grid; gap: 10px; }
+  .bar-row { display: grid; grid-template-columns: 110px 1fr 36px; gap: 8px; align-items: center; }
+  .track { height: 14px; }
+  .fill { height: 100%; border-radius: 0 4px 4px 0; background: var(--c); min-width: 2px; }
+  .muted { color: var(--muted); }
+  .empty { color: var(--muted); padding: 24px 0; text-align: center; }
+  details summary { cursor: pointer; color: var(--ink-2); }
+  @media (max-width: 900px) {
+    main { padding: 8px 16px 24px; }
+    .tile { grid-column: span 6; } .wide, .narrow { grid-column: span 12; }
+    header { padding: 16px 16px 8px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>IoT Security Monitor</h1>
+  <span class="sub" id="window">waiting for data...</span>
+</header>
+<main>
+  <section class="card tile"><div class="v" id="k-devices">-</div><div class="l">devices on the network</div></section>
+  <section class="card tile"><div class="v" id="k-packets">-</div><div class="l">packets observed</div></section>
+  <section class="card tile"><div class="v" id="k-alerts">-</div><div class="l">alerts</div></section>
+  <section class="card tile"><div class="v" id="k-high">-</div><div class="l">high or critical</div></section>
+
+  <section class="card wide">
+    <h2>Traffic per minute by protocol (packets)</h2>
+    <div class="legend" id="legend"></div>
+    <div class="chart"><canvas id="traffic" aria-label="Stacked bar chart of packets per minute by protocol"></canvas></div>
+  </section>
+
+  <section class="card narrow">
+    <h2>Alerts by severity</h2>
+    <div class="bars" id="sev-bars"></div>
+    <h2 style="margin-top:24px">Alerts by rule</h2>
+    <table id="rules"><tbody></tbody></table>
+  </section>
+
+  <section class="card full">
+    <h2>Alerts</h2>
+    <div class="scroll"><table id="alerts">
+      <thead><tr><th>Time</th><th>Severity</th><th>Rule</th><th>Alert</th><th>ATT&amp;CK</th><th>Details</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+
+  <section class="card full">
+    <h2>Device inventory</h2>
+    <div class="scroll"><table id="devices">
+      <thead><tr><th>IP</th><th>MAC</th><th>Vendor</th><th>Role</th><th>Name</th><th>Services</th>
+        <th>Protocols</th><th class="num">Sent</th><th class="num">Received</th><th>First seen</th><th>Last seen</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const UTC = new URLSearchParams(location.search).has("utc");
+// Fixed protocol -> categorical slot, so a protocol keeps its colour when others come and go.
+const SLOTS = ["MQTT", "HTTPS", "DNS", "HTTP", "NTP", "ARP", "TELNET"];
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const colourFor = app => { const i = SLOTS.indexOf(app); return i < 0 ? css("--other") : css(`--s${i + 1}`); };
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const fmtTime = (ts, withDate) => {
+  const d = new Date(ts * 1000);
+  const opts = {hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: UTC ? "UTC" : undefined};
+  if (withDate) Object.assign(opts, {month: "short", day: "numeric"});
+  return d.toLocaleString(undefined, opts);
+};
+const fmtBytes = n => n >= 1e6 ? (n / 1e6).toFixed(1) + " MB" : n >= 1e3 ? (n / 1e3).toFixed(1) + " kB" : n + " B";
+const sevBadge = s => `<span class="sev ${esc(s)}">${esc(s)}</span>`;
+
+let chart;
+function drawTraffic(data) {
+  const names = Object.keys(data.series);
+  const known = SLOTS.filter(n => names.includes(n));
+  const others = names.filter(n => !SLOTS.includes(n));
+  const datasets = known.map(n => ({label: n, data: data.series[n]}));
+  if (others.length) {
+    const sum = data.minutes.map((_, i) => others.reduce((a, n) => a + data.series[n][i], 0));
+    datasets.push({label: "Other", data: sum, others});
+  }
+  datasets.forEach(d => Object.assign(d, {
+    backgroundColor: colourFor(d.label), borderColor: css("--surface"), borderWidth: {top: 2},
+    borderSkipped: "bottom", borderRadius: 0, maxBarThickness: 28,
+  }));
+  if (datasets.length) {
+    const top = datasets[datasets.length - 1];
+    top.borderRadius = {topLeft: 4, topRight: 4};
+  }
+  document.getElementById("legend").innerHTML = datasets.map(d =>
+    `<span><i style="background:${d.backgroundColor}"></i>${esc(d.label)}${d.others ? ` <span class="muted">(${esc(d.others.join(", "))})</span>` : ""}</span>`).join("");
+
+  const labels = data.minutes.map(m => fmtTime(m).slice(0, 5));
+  if (chart) { chart.data.labels = labels; chart.data.datasets = datasets; chart.update("none"); return; }
+  Chart.defaults.font.family = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+  Chart.defaults.color = css("--muted");
+  chart = new Chart(document.getElementById("traffic"), {
+    type: "bar",
+    data: {labels, datasets},
+    options: {
+      maintainAspectRatio: false, animation: false,
+      interaction: {mode: "index", intersect: false},
+      plugins: {
+        legend: {display: false},
+        tooltip: {itemSort: (a, b) => b.datasetIndex - a.datasetIndex,
+                  callbacks: {footer: items => "Total " + items.reduce((a, i) => a + i.parsed.y, 0).toLocaleString()}},
+      },
+      scales: {
+        x: {stacked: true, grid: {display: false}, border: {color: css("--axis")}},
+        y: {stacked: true, beginAtZero: true, grid: {color: css("--grid")}, border: {display: false},
+            ticks: {maxTicksLimit: 5}},
+      },
+    },
+  });
+}
+
+function drawSummary(s) {
+  document.getElementById("k-devices").textContent = s.devices.toLocaleString();
+  document.getElementById("k-packets").textContent = s.packets.toLocaleString();
+  document.getElementById("k-alerts").textContent = s.alerts.toLocaleString();
+  const hi = s.by_severity.filter(x => x.severity === "high" || x.severity === "critical").reduce((a, x) => a + x.count, 0);
+  document.getElementById("k-high").textContent = hi.toLocaleString();
+  if (s.first !== null) {
+    document.getElementById("window").textContent =
+      `${fmtTime(s.first, true)} - ${fmtTime(s.last + 60, true)}${UTC ? " UTC" : ""} · ${fmtBytes(s.bytes)} · refreshes every 5 s`;
+  }
+  const max = Math.max(1, ...s.by_severity.map(x => x.count));
+  const colour = {critical: "--critical", high: "--serious", medium: "--warning", low: "--good"};
+  document.getElementById("sev-bars").innerHTML = s.by_severity.map(x => `
+    <div class="bar-row" title="${x.count} ${x.severity} alerts">
+      ${sevBadge(x.severity)}
+      <div class="track"><div class="fill" style="--c:var(${colour[x.severity]});width:${x.count / max * 100}%"></div></div>
+      <span class="num">${x.count}</span>
+    </div>`).join("");
+  document.querySelector("#rules tbody").innerHTML = s.by_rule.length
+    ? s.by_rule.map(r => `<tr><td class="mono">${esc(r.rule)}</td><td class="num">${r.n}</td></tr>`).join("")
+    : `<tr><td class="muted">no alerts</td></tr>`;
+}
+
+function drawAlerts(rows) {
+  document.querySelector("#alerts tbody").innerHTML = rows.length ? rows.map(a => `
+    <tr>
+      <td class="mono">${fmtTime(a.ts)}</td>
+      <td>${sevBadge(a.severity)}</td>
+      <td class="mono">${esc(a.rule)}</td>
+      <td>${esc(a.title)}</td>
+      <td class="muted">${esc(a.mitre)}</td>
+      <td><details><summary>view</summary><pre class="mono">${esc(JSON.stringify(a.details, null, 2))}</pre></details></td>
+    </tr>`).join("") : `<tr><td colspan="6" class="empty">No alerts. The network looks like its baseline.</td></tr>`;
+}
+
+function drawDevices(rows) {
+  document.querySelector("#devices tbody").innerHTML = rows.length ? rows.map(d => `
+    <tr>
+      <td class="mono">${esc(d.ips)}</td>
+      <td class="mono">${esc(d.mac || "-")}</td>
+      <td>${esc(d.vendor)}</td>
+      <td>${esc(d.role)}</td>
+      <td class="mono">${esc(d.name || "")}</td>
+      <td class="mono">${esc(d.services || "-")}</td>
+      <td class="muted">${esc(d.protocols)}</td>
+      <td class="num">${fmtBytes(d.bytes_sent)}</td>
+      <td class="num">${fmtBytes(d.bytes_recv)}</td>
+      <td class="mono">${fmtTime(d.first_seen)}</td>
+      <td class="mono">${fmtTime(d.last_seen)}</td>
+    </tr>`).join("") : `<tr><td colspan="11" class="empty">No devices seen yet.</td></tr>`;
+}
+
+async function refresh() {
+  try {
+    const get = p => fetch(p).then(r => r.json());
+    const [s, t, a, d] = await Promise.all([get("api/summary"), get("api/traffic"), get("api/alerts"), get("api/devices")]);
+    drawSummary(s); drawTraffic(t); drawAlerts(a); drawDevices(d);
+  } catch (e) { console.error(e); }
+}
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

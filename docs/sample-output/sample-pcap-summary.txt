@@ -1,0 +1,3 @@
+
+3546 packets, 7 devices, 8 alerts
+alerts by severity: high=4, medium=3, critical=1
