@@ -1,0 +1,34 @@
+# Live Docker lab, Week 2 check (times UTC). Monitor started with an empty register:
+# the 7 lab devices seen in the 60 s learning period were saved as approved.
+# Then: docker run --network iot-lab_iotlab --ip 172.28.0.77 alpine ping 172.28.0.10   (rogue device)
+#       a container on 172.28.0.79 sends 3 gratuitous ARP replies claiming 172.28.0.10 (the broker)
+
+capturing on iotlab0 - Ctrl+C to stop
+07:07:10  [ALERT HIGH] traffic_spike: Traffic spike: 172.28.0.22 sent 51,687 bytes in 10s (baseline 3,503)
+          (not part of this test: a known false positive, see docs/roadmap.md)
+07:07:57  [ALERT MEDIUM] new_device: New IoT device detected: 172.28.0.77 (locally administered (virtual / randomised))
+          IP:            172.28.0.77
+          MAC:           ca:30:56:c9:5d:12
+          Vendor:        locally administered (virtual / randomised)
+          First packet:  who-has 172.28.0.77 tell 172.28.0.77
+07:08:00  [ALERT MEDIUM] new_device: New IoT device detected: 172.28.0.79 (locally administered (virtual / randomised))
+          IP:            172.28.0.79
+          MAC:           ea:70:f0:99:43:66
+          Vendor:        locally administered (virtual / randomised)
+          First packet:  who-has 172.28.0.79 tell 172.28.0.79
+07:08:01  [ALERT HIGH] device_change: IP conflict: 172.28.0.10 claimed by ea:70:f0:99:43:66, already used by dc:a6:32:00:00:10
+          IP:            172.28.0.10
+          MAC:           ea:70:f0:99:43:66
+          Vendor:        locally administered (virtual / randomised)
+          Previous MAC:  dc:a6:32:00:00:10
+
+# GET /api/devices after the test (ips, mac, connections, status)
+172.28.0.22              44:19:b6:00:00:22   12  approved
+172.28.0.53              72:4e:7d:d4:f9:02    8  approved
+172.28.0.5               02:53:d6:fa:df:66    2  approved
+172.28.0.21              24:0a:c4:00:00:21    7  approved
+172.28.0.10              dc:a6:32:00:00:10    2  approved
+172.28.0.20              24:0a:c4:00:00:20    1  approved
+172.28.0.30              96:20:c5:f2:a7:08    8  approved
+172.28.0.77              ca:30:56:c9:5d:12    0  pending
+172.28.0.10,172.28.0.79  ea:70:f0:99:43:66    0  pending

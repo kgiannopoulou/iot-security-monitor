@@ -24,6 +24,7 @@ Design principles:
 | `traffic_spike` | high | T1498 Network Denial of Service / T0814 |
 | `suspicious_port` | per port (medium to critical) | T1021 Remote Services / T0886 |
 | `failed_connections` | medium (refused), high (MQTT auth) | T1110 Brute Force / T0812 Default Credentials |
+| `device_change` | high (IP conflict), low (IP change) | T1557.002 ARP Cache Poisoning, T1036 Masquerading / T0830 Adversary-in-the-Middle |
 
 ---
 
@@ -55,17 +56,43 @@ higher threshold would catch them.
 ## `new_device`
 
 **Logic.** The inventory reports the first packet from an unseen MAC (or IP
-when there is no Ethernet header). Devices seen during the **learning period**
-(the first 60 s) form the baseline. Devices in `known_devices` never alert.
-Everything else raises an alert with its MAC vendor.
+when there is no Ethernet header). With an **asset register** loaded
+(`--inventory`, Week 2), any device not in the register alerts on its first
+packet, and is saved as `pending` so it alerts once rather than on every run.
+Without a register, devices seen during the **learning period** (the first
+60 s) form the baseline. Devices in `known_devices` never alert. The alert
+carries IP, MAC, vendor and the first packet seen
+([Week 2 write-up](02-device-inventory.md)).
 
 **Why it works on IoT/OT.** These networks are small and static. A new MAC is
 rare and always worth a look: a contractor laptop, a rogue Raspberry Pi, a
 replaced sensor.
 
-**False positives.** Replaced hardware, DHCP churn, and phones that randomise
-their MAC (shown as "locally administered"). For long-running deployments,
-pre-populate `known_devices` instead of relying on the learning period.
+**False positives.** Replaced hardware and phones that randomise their MAC
+(shown as "locally administered"). For long-running deployments, build the
+asset register with `iotmon inventory learn` from trusted traffic instead of
+relying on the learning period.
+
+## `device_change`
+
+**Logic.** Watches the binding between MAC and IP addresses.
+*IP conflict* (high): an IP already bound to one MAC is used by a different
+MAC, as a sender in an ARP reply or as the source of an IP packet. That is
+what ARP spoofing looks like from a SPAN port: the attacker announces "the
+gateway's IP is at my MAC". *IP change* (low): a known MAC appears on a new
+IP, either within the capture or compared with the asset register.
+
+**Why it works on IoT/OT.** OT devices are mostly statically addressed, so
+address changes are rare, and a second MAC for a PLC's or broker's IP is
+either a man-in-the-middle or a misconfiguration that will break the process
+anyway.
+
+**False positives.** DHCP renewals (hence low severity for changes). A
+device that moved keeps its old IP binding for the rest of the run, so a new
+device reusing that address raises a conflict. Traffic routed from another
+subnet carries the router's MAC, so monitor one layer-2 segment per sensor.
+Validated live in the Docker lab with gratuitous ARP
+([lab guide](lab-setup.md#asset-register-week-2)).
 
 ## `traffic_spike`
 
@@ -150,7 +177,7 @@ logs into the pipeline later.
 Sample capture result:
 
 ```
-10:35:00  [ALERT MEDIUM]   new_device: New device on network: 192.168.1.66 (Raspberry Pi Foundation)
+10:35:00  [ALERT MEDIUM]   new_device: New IoT device detected: 192.168.1.66 (Raspberry Pi Foundation)
 10:35:00  [ALERT MEDIUM]   port_scan: ARP sweep from 192.168.1.66
 10:35:10  [ALERT HIGH]     suspicious_port: TELNET session 192.168.1.66 -> 192.168.1.22:23
 10:35:10  [ALERT HIGH]     port_scan: Port scan: 192.168.1.66 probed 15 ports on 192.168.1.22

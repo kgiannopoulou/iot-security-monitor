@@ -72,6 +72,52 @@ ALERTS
 
 Normal lab traffic over the same run raised no other alerts.
 
+## Asset register (Week 2)
+
+The monitor runs with `--inventory /data/inventory.json`, so the register
+lives in `data/lab/inventory.json` on the host and survives restarts. On the
+first start it is empty: the devices seen in the first 60 s are saved as
+`approved`, and anything that appears later raises `new_device` and is saved
+as `pending`. The register is saved every 30 s and on `docker compose stop`.
+
+Add a device nobody approved, and a container that claims the broker's IP
+with gratuitous ARP replies (ARP spoofing):
+
+```bash
+docker run --rm --network iot-lab_iotlab --ip 172.28.0.77 alpine:3.20 ping -c 3 172.28.0.10
+
+MSYS_NO_PATHCONV=1 docker run --rm --network iot-lab_iotlab --ip 172.28.0.79 --cap-add NET_RAW \
+  --entrypoint python iot-lab-monitor -c "
+from scapy.all import ARP, Ether, sendp, get_if_hwaddr
+me = get_if_hwaddr('eth0')
+sendp(Ether(src=me, dst='ff:ff:ff:ff:ff:ff') / ARP(op=2, hwsrc=me, psrc='172.28.0.10',
+      hwdst='ff:ff:ff:ff:ff:ff', pdst='172.28.0.10'), iface='eth0', count=3, inter=0.5)"
+```
+
+Result in this lab (2026-10-07, full output in
+[`sample-output/live-lab-week2.txt`](sample-output/live-lab-week2.txt)):
+
+```
+07:07:57  [ALERT MEDIUM] new_device: New IoT device detected: 172.28.0.77 (locally administered (virtual / randomised))
+07:08:00  [ALERT MEDIUM] new_device: New IoT device detected: 172.28.0.79 (locally administered (virtual / randomised))
+07:08:01  [ALERT HIGH] device_change: IP conflict: 172.28.0.10 claimed by ea:70:f0:99:43:66, already used by dc:a6:32:00:00:10
+```
+
+Review and approve from the host (stop the lab first, or run it inside the
+container). The register is plain JSON:
+
+```bash
+python -m iotmon inventory show --inventory data/lab/inventory.json
+python -m iotmon inventory approve 172.28.0.77 --inventory data/lab/inventory.json
+```
+
+Do not open `data/lab/iotmon.db` from Windows while the lab is running.
+SQLite's WAL shared memory does not work across the Docker Desktop file-share
+boundary, so a host-side connection can checkpoint away the containers' WAL.
+Query it through the dashboard API or `docker compose exec dashboard` instead.
+
+## Full detection set
+
 The full detection set (scan, rogue device, brute force, flood) is exercised
 by the bundled sample capture instead of live traffic. See
 [detection-rules.md](detection-rules.md#validating-the-rules).

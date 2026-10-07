@@ -17,7 +17,8 @@ def test_api_endpoints(tmp_path):
     s = client.get("/api/summary").get_json()
     assert (s["devices"], s["alerts"], s["packets"]) == (1, 1, 1)
     assert client.get("/api/alerts").get_json()[0]["title"] == "test alert"
-    assert client.get("/api/devices").get_json()[0]["ips"] == "192.168.1.20"
+    devices = client.get("/api/devices").get_json()
+    assert devices[0]["ips"] == "192.168.1.20" and devices[0]["connections"] == 1
     assert client.get("/api/traffic").get_json() == {"minutes": [60], "series": {"NTP": [1]}}
     assert client.get("/").status_code == 200
 

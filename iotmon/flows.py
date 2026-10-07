@@ -68,10 +68,12 @@ class FlowTable:
         self.idle_timeout = idle_timeout
         self.active: dict[tuple, Flow] = {}
         self._last_sweep = 0.0
+        self.new_flow: Flow | None = None  # set when the last packet opened a conversation
 
     def update(self, rec: PacketRecord) -> list[Flow]:
         """Account for one packet; return flows that expired as a result."""
         expired = []
+        self.new_flow = None
         if rec.ts - self._last_sweep >= 5:
             expired = self.expire(rec.ts)
             self._last_sweep = rec.ts
@@ -90,6 +92,7 @@ class FlowTable:
         if flow is None:
             flow = Flow(*key, app=rec.app, first_seen=rec.ts, last_seen=rec.ts)
             self.active[key] = flow
+            self.new_flow = flow
         flow.last_seen = rec.ts
         flow.packets += 1
         flow.bytes += rec.length

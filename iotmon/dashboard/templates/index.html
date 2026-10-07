@@ -66,6 +66,10 @@
   .track { height: 14px; }
   .fill { height: 100%; border-radius: 0 4px 4px 0; background: var(--c); min-width: 2px; }
   .muted { color: var(--muted); }
+  /* asset-register status: approved is quiet, anything unreviewed stands out */
+  .asset { font-weight: 600; white-space: nowrap; }
+  .asset.approved { color: var(--muted); font-weight: 400; }
+  .asset.pending, .asset.new { color: var(--warning); }
   .empty { color: var(--muted); padding: 24px 0; text-align: center; }
   details summary { cursor: pointer; color: var(--ink-2); }
   @media (max-width: 900px) {
@@ -111,7 +115,7 @@
     <h2>Device inventory</h2>
     <div class="scroll"><table id="devices">
       <thead><tr><th>IP</th><th>MAC</th><th>Vendor</th><th>Role</th><th>Name</th><th>Services</th>
-        <th>Protocols</th><th class="num">Sent</th><th class="num">Received</th><th>First seen</th><th>Last seen</th></tr></thead>
+        <th>Protocols</th><th class="num">Conn.</th><th class="num">Sent</th><th class="num">Received</th><th>First seen</th><th>Last seen</th><th>Status</th></tr></thead>
       <tbody></tbody>
     </table></div>
   </section>
@@ -224,11 +228,13 @@ function drawDevices(rows) {
       <td class="mono">${esc(d.name || "")}</td>
       <td class="mono">${esc(d.services || "-")}</td>
       <td class="muted">${esc(d.protocols)}</td>
+      <td class="num">${(d.connections || 0).toLocaleString()}</td>
       <td class="num">${fmtBytes(d.bytes_sent)}</td>
       <td class="num">${fmtBytes(d.bytes_recv)}</td>
       <td class="mono">${fmtTime(d.first_seen)}</td>
       <td class="mono">${fmtTime(d.last_seen)}</td>
-    </tr>`).join("") : `<tr><td colspan="11" class="empty">No devices seen yet.</td></tr>`;
+      <td>${d.status ? `<span class="asset ${esc(d.status)}">${esc(d.status)}</span>` : `<span class="muted">-</span>`}</td>
+    </tr>`).join("") : `<tr><td colspan="13" class="empty">No devices seen yet.</td></tr>`;
 }
 
 async function refresh() {

@@ -1,9 +1,9 @@
 # Architecture
 
 ```
-  pcap file ──┐                      ┌──▶ Inventory   (devices: MAC, vendor, role, services)
+  pcap file ──┐                      ┌──▶ Inventory   (devices: MAC, vendor, role, connections) ◀─▶ inventory.json
               ├─▶ capture ─▶ parser ─┼──▶ FlowTable   (bidirectional conversations)
-  interface ──┘   (scapy)  (Packet-  ├──▶ Detection   (5 rules, packet-time windows) ──▶ alerts
+  interface ──┘   (scapy)  (Packet-  ├──▶ Detection   (6 rules, packet-time windows) ──▶ alerts
                             Record)  │      Engine
                                      └──▶ Printer     (terminal table + coloured alerts)
                                                 │
@@ -22,12 +22,13 @@
 | `parser.py` | scapy packet → `PacketRecord`: link, network, transport, application. Decodes MQTT (CONNECT/CONNACK/PUBLISH/SUBSCRIBE), DNS, HTTP, NTP, ICMP, and labels TLS as encrypted. Never raises on malformed payloads. |
 | `models.py` | `PacketRecord`, `Alert`, the known-services table, the service-port rule. |
 | `flows.py` | Groups packets into client→server flows with idle expiry and TCP state (ESTABLISHED / CLOSED / REJECTED / NO-REPLY). |
-| `inventory.py` | Passive asset inventory: MAC-keyed devices, OUI vendor lookup, role inference from offered services and MQTT behaviour. |
-| `detections.py` | `DetectionEngine` plus five `Detector` subclasses. See [detection-rules.md](detection-rules.md). |
+| `inventory.py` | Passive asset inventory: MAC-keyed devices, OUI vendor lookup, role inference from offered services and MQTT behaviour, connection counts, MAC/IP binding changes. |
+| `assets.py` | Persistent asset register (`data/inventory.json`): known devices keyed by MAC with status approved / pending, merged after each run (replay-safe), saved every 30 s during live capture. See [Week 2](02-device-inventory.md). |
+| `detections.py` | `DetectionEngine` plus six `Detector` subclasses. See [detection-rules.md](detection-rules.md). |
 | `storage.py` | SQLite in WAL mode (writer and dashboard reader coexist), JSONL alerts for SIEM ingestion, optional CSV. Writes are batched and committed every 2 s. |
 | `pipeline.py` | `Monitor`: wires the stages together and flushes state on exit. |
 | `dashboard/` | Flask app plus one HTML page. JSON API (`/api/summary`, `/api/alerts`, `/api/devices`, `/api/traffic`, `/api/flows`); the page polls it every 5 s. |
-| `cli.py` | `read`, `live`, `report`, `dashboard` sub-commands. |
+| `cli.py` | `read`, `live`, `report`, `inventory` (learn / show / approve), `dashboard` sub-commands. |
 
 ## Key decisions
 

@@ -6,6 +6,7 @@ import time
 from collections import Counter
 from collections.abc import Iterable
 
+from .assets import AssetRegister
 from .detections import DetectionEngine
 from .display import Printer
 from .flows import FlowTable
@@ -15,11 +16,20 @@ from .storage import Storage
 
 
 class Monitor:
-    def __init__(self, config: dict, storage: Storage | None = None, printer: Printer | None = None):
+    def __init__(self, config: dict, storage: Storage | None = None, printer: Printer | None = None,
+                 assets: AssetRegister | None = None, new_asset_status: str = "pending"):
         self.config = config
         self.inventory = Inventory(config["network"]["lab_networks"])
         self.flows = FlowTable(idle_timeout=float(config["flows"].get("idle_timeout_s", 60)))
-        self.engine = DetectionEngine(config["detections"], self.inventory)
+        # An empty register is bootstrapped: the new_device learning period applies,
+        # and the devices seen during it are saved as approved.
+        self.bootstrap = assets is not None and len(assets) == 0
+        self.learning = float(config["detections"].get("new_device", {}).get("learning_period_s", 60))
+        self.engine = DetectionEngine(config["detections"], self.inventory, None if self.bootstrap else assets)
+        self.assets = assets
+        self.new_asset_status = new_asset_status
+        self.added_assets: list[str] = []
+        self._last_asset_save = time.monotonic()
         self.storage = storage
         self.printer = printer
         self.alerts: list[Alert] = []
@@ -31,7 +41,11 @@ class Monitor:
         self.packets += 1
         self.protocols[rec.app or rec.protocol] += 1
         new_device = self.inventory.update(rec)
+        if new_device is not None and self.assets is not None:
+            new_device.status = self.assets.status_of(new_device)
         expired = self.flows.update(rec)
+        if self.flows.new_flow is not None:
+            self.inventory.count_flow(self.flows.new_flow.client_ip, self.flows.new_flow.server_ip)
         alerts = self.engine.process(rec, new_device)
 
         if self.printer:
@@ -45,7 +59,22 @@ class Monitor:
                 self.storage.devices(list(self.inventory.devices.values()))
                 self.storage.commit()
                 self._last_commit = time.monotonic()
+        if self.assets is not None and time.monotonic() - self._last_asset_save > 30:
+            self.save_assets()  # long live captures keep the register current
         return alerts
+
+    def save_assets(self) -> None:
+        # Merging the same run repeatedly is safe: overlapping observations are not double counted.
+        added = self.assets.merge(list(self.inventory.devices.values()), self._status_for_new)
+        self.added_assets += [k for k in added if k not in self.added_assets]
+        self.assets.save()
+        self._last_asset_save = time.monotonic()
+
+    def _status_for_new(self, dev) -> str:
+        first = self.engine.ctx.first_ts
+        if self.bootstrap and first is not None and dev.first_seen - first < self.learning:
+            return "approved"
+        return self.new_asset_status
 
     def run(self, source: Iterable[PacketRecord]) -> None:
         try:
@@ -58,6 +87,8 @@ class Monitor:
 
     def close(self) -> None:
         self._emit(self.engine.flush())
+        if self.assets is not None:
+            self.save_assets()
         if self.storage:
             self.storage.flows(self.flows.drain())
             self.storage.devices(list(self.inventory.devices.values()))

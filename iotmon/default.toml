@@ -19,8 +19,15 @@ cooldown_s = 300
 
 [detections.new_device]
 enabled = true
-learning_period_s = 60      # devices seen in the first minute form the baseline
+learning_period_s = 60      # without an asset register: devices seen in the first minute form the baseline
 known_devices = []          # MACs or IPs that never alert, e.g. ["b8:27:eb:12:34:56"]
+                            # (with --inventory, the asset register is the main allowlist)
+
+[detections.device_change]
+enabled = true
+ip_change_severity = "low"  # known MAC on a new IP (DHCP churn is the usual cause)
+learning_period_s = 0       # IP conflicts (two MACs, one IP) are always high
+cooldown_s = 300
 
 [detections.traffic_spike]
 enabled = true

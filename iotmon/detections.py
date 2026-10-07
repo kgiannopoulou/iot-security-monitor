@@ -15,14 +15,16 @@ from typing import TYPE_CHECKING
 from .models import KNOWN_SERVICES, Alert, PacketRecord
 
 if TYPE_CHECKING:
+    from .assets import AssetRegister
     from .inventory import Device, Inventory
 
 
 class Context:
     """What the pipeline knows when a detector sees a packet."""
 
-    def __init__(self, inventory: Inventory):
+    def __init__(self, inventory: Inventory, assets: AssetRegister | None = None):
         self.inventory = inventory
+        self.assets = assets  # persistent asset register, when one was loaded
         self.new_device: Device | None = None
         self.first_ts: float | None = None
 
@@ -115,8 +117,11 @@ class PortScanDetector(Detector):
 
 # --------------------------------------------------------------------------- #
 class NewDeviceDetector(Detector):
-    """A device appears that is not in the known-device list and was not seen
-    during the initial learning period."""
+    """A device appears that is not in the asset register / known-device list.
+
+    With an asset register loaded, anything not in it is new, from the first
+    packet. Without one, devices seen during the initial learning period form
+    the baseline."""
 
     name = "new_device"
 
@@ -129,14 +134,18 @@ class NewDeviceDetector(Detector):
         dev = ctx.new_device
         if dev is None or ctx.first_ts is None:
             return []
-        if rec.ts - ctx.first_ts < self.learning:
+        if ctx.assets is not None:
+            if dev.key in ctx.assets:
+                return []
+        elif rec.ts - ctx.first_ts < self.learning:
             return []
         if (dev.mac and dev.mac in self.known) or rec.src_ip in self.known:
             return []
         return [Alert(
-            rec.ts, self.name, "medium", f"New device on network: {rec.src_ip} ({dev.vendor})",
+            rec.ts, self.name, "medium", f"New IoT device detected: {rec.src_ip} ({dev.vendor})",
             src=rec.src_ip, mitre="T1200 Hardware Additions / ICS T0848 Rogue Master",
-            details={"mac": dev.mac, "vendor": dev.vendor, "first_packet": rec.info or rec.protocol},
+            details={"ip": rec.src_ip, "mac": dev.mac, "vendor": dev.vendor,
+                     "first_packet": rec.info or rec.protocol},
         )]
 
 
@@ -343,16 +352,70 @@ class FailedConnectionDetector(Detector):
                       details={"failures": len(dq), "reasons": reasons, "window_s": self.window, "port": port})]
 
 
+# --------------------------------------------------------------------------- #
+class DeviceChangeDetector(Detector):
+    """Changes to a known device's addressing.
+
+    ip_conflict  an IP already bound to one MAC is claimed by another MAC:
+                 ARP spoofing / man-in-the-middle, or an address clash.
+    ip_change    a known MAC shows up on a different IP than before (within
+                 this run, or compared with the asset register): DHCP churn,
+                 re-addressing, or a device being moved to impersonate another.
+    """
+
+    name = "device_change"
+
+    def __init__(self, cfg: dict):
+        super().__init__(cfg)
+        self.ip_change_severity = cfg.get("ip_change_severity", "low")
+        self.learning = float(cfg.get("learning_period_s", 0))
+        self._checked: set[str] = set()  # register comparison done once per device
+
+    def on_packet(self, rec, ctx):
+        alerts = []
+        if ctx.first_ts is not None and rec.ts - ctx.first_ts < self.learning:
+            return alerts
+        for kind, dev, ip, other in ctx.inventory.changes:
+            if kind == "ip_conflict" and self._should_fire(("conflict", ip), rec.ts):
+                alerts.append(Alert(
+                    rec.ts, self.name, "high",
+                    f"IP conflict: {ip} claimed by {dev.mac}, already used by {other.mac}",
+                    src=ip, mitre="T1557.002 ARP Cache Poisoning / ICS T0830 Adversary-in-the-Middle",
+                    details={"ip": ip, "mac": dev.mac, "vendor": dev.vendor,
+                             "previous_mac": other.mac, "previous_vendor": other.vendor,
+                             "packet": rec.info or rec.protocol},
+                ))
+            elif kind == "ip_change" and self._should_fire(("change", dev.key, ip), rec.ts):
+                alerts.append(self._ip_change(rec, dev, ip, other))
+
+        dev = ctx.inventory.lookup(rec.src_ip)
+        if ctx.assets is not None and dev is not None and dev.key not in self._checked:
+            self._checked.add(dev.key)
+            asset = ctx.assets.get(dev.key)
+            if asset and asset["ip"] and rec.src_ip not in asset["ips"]:
+                alerts.append(self._ip_change(rec, dev, rec.src_ip, asset["ips"], source="asset register"))
+        return alerts
+
+    def _ip_change(self, rec, dev, ip, previous, source="this capture"):
+        return Alert(
+            rec.ts, self.name, self.ip_change_severity,
+            f"Device changed IP: {dev.mac or dev.key} now {ip} (was {', '.join(previous)})",
+            src=ip, mitre="T1036 Masquerading",
+            details={"ip": ip, "mac": dev.mac, "vendor": dev.vendor, "name": dev.name,
+                     "previous_ips": list(previous), "compared_with": source},
+        )
+
+
 DETECTORS = {
     cls.name: cls
     for cls in (PortScanDetector, NewDeviceDetector, TrafficSpikeDetector,
-                SuspiciousPortDetector, FailedConnectionDetector)
+                SuspiciousPortDetector, FailedConnectionDetector, DeviceChangeDetector)
 }
 
 
 class DetectionEngine:
-    def __init__(self, config: dict, inventory: Inventory):
-        self.ctx = Context(inventory)
+    def __init__(self, config: dict, inventory: Inventory, assets: AssetRegister | None = None):
+        self.ctx = Context(inventory, assets)
         self.detectors: list[Detector] = []
         for name, cls in DETECTORS.items():
             cfg = config.get(name, {})

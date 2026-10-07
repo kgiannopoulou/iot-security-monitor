@@ -70,7 +70,7 @@ services:
     # between containers (like a SPAN port on a physical switch).
     network_mode: host
     cap_add: [NET_RAW, NET_ADMIN]
-    command: ["live", "-i", "iotlab0", "-q", "--append", "--db", "/data/iotmon.db"]
+    command: ["live", "-i", "iotlab0", "-q", "--append", "--db", "/data/iotmon.db", "--inventory", "/data/inventory.json"]
     volumes: ["../data/lab:/data"]
 
   dashboard:

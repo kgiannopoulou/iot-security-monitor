@@ -55,7 +55,7 @@ def test_baseline_is_quiet(records):
 def test_every_attack_stage_is_detected(monitor):
     titles = [a.title for a in monitor.alerts]
     expected = [
-        "New device on network: 192.168.1.66",
+        "New IoT device detected: 192.168.1.66",
         "ARP sweep from 192.168.1.66",
         "Port scan: 192.168.1.66",
         "TELNET session 192.168.1.66 -> 192.168.1.22:23",

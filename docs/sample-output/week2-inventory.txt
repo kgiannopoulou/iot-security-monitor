@@ -1,0 +1,83 @@
+$ python -m iotmon inventory learn samples/iot-lab.pcap --duration 290
+learned 6 devices from 556 packets; 6 new, register data/inventory.json now holds 6 assets
+
+$ python -m iotmon inventory show
+IP              MAC               VENDOR                     ROLE                             PROTOCOLS                 CONN  FIRST SEEN (UTC)     LAST SEEN (UTC)      STATUS
+192.168.1.21    24:0a:c4:00:00:21 Espressif (ESP32/ESP8266)  MQTT client (sensor/actuator)    ARP,DNS,HTTPS,MQTT,NTP      13  2026-10-07 10:30:01  2026-10-07 10:34:42  approved
+192.168.1.1     50:c7:bf:00:00:01 TP-Link                    DNS server                       ARP,DNS,NTP                 16  2026-10-07 10:30:01  2026-10-07 10:34:19  approved
+192.168.1.20    24:0a:c4:00:00:20 Espressif (ESP32/ESP8266)  MQTT client (sensor/actuator)    ARP,MQTT,NTP                 3  2026-10-07 10:30:01  2026-10-07 10:34:50  approved
+192.168.1.10    dc:a6:32:00:00:10 Raspberry Pi Trading       MQTT broker                      ARP,MQTT                     2  2026-10-07 10:30:01  2026-10-07 10:34:50  approved
+192.168.1.22    44:19:b6:00:00:22 Hikvision                  Web interface                    ARP,DNS,HTTP,HTTPS,NTP      20  2026-10-07 10:30:04  2026-10-07 10:34:50  approved
+192.168.1.5     3c:52:82:00:00:05 HP                         client                           ARP,HTTP,NTP                 7  2026-10-07 10:30:06  2026-10-07 10:34:40  approved
+
+6 assets, 0 pending review
+
+$ python -m iotmon read samples/iot-lab.pcap -q --utc --inventory
+10:35:00  [ALERT MEDIUM] new_device: New IoT device detected: 192.168.1.66 (Raspberry Pi Foundation)
+          IP:            192.168.1.66
+          MAC:           b8:27:eb:00:00:66
+          Vendor:        Raspberry Pi Foundation
+          First packet:  who-has 192.168.1.1 tell 192.168.1.66
+10:35:00  [ALERT MEDIUM] port_scan: ARP sweep from 192.168.1.66
+10:35:10  [ALERT HIGH] suspicious_port: TELNET session 192.168.1.66 -> 192.168.1.22:23
+10:35:10  [ALERT HIGH] port_scan: Port scan: 192.168.1.66 probed 15 ports on 192.168.1.22
+10:35:52  [ALERT MEDIUM] failed_connections: Repeated failed connections: 192.168.1.66 -> 192.168.1.21:23 (10x)
+10:36:06  [ALERT HIGH] failed_connections: MQTT authentication failures: 192.168.1.66 refused 5x by broker 192.168.1.10
+10:36:35  [ALERT CRITICAL] suspicious_port: IRC session 192.168.1.22 -> 198.51.100.23:6667
+10:36:50  [ALERT HIGH] traffic_spike: Traffic spike: 192.168.1.22 sent 591,031 bytes in 10s (baseline 9,027)
+
+3546 packets, 7 devices, 8 alerts
+alerts by severity: high=4, medium=3, critical=1
+asset register data/inventory.json: 7 assets, added: 1 pending
+
+$ python -m iotmon inventory show
+IP              MAC               VENDOR                     ROLE                             PROTOCOLS                 CONN  FIRST SEEN (UTC)     LAST SEEN (UTC)      STATUS
+192.168.1.21    24:0a:c4:00:00:21 Espressif (ESP32/ESP8266)  MQTT client (sensor/actuator)    ARP,DNS,HTTPS,MQTT,NTP      31  2026-10-07 10:30:01  2026-10-07 10:37:53  approved
+192.168.1.1     50:c7:bf:00:00:01 TP-Link                    DNS server                       ARP,DNS,NTP                 21  2026-10-07 10:30:01  2026-10-07 10:37:15  approved
+192.168.1.20    24:0a:c4:00:00:20 Espressif (ESP32/ESP8266)  MQTT client (sensor/actuator)    ARP,MQTT,NTP                 3  2026-10-07 10:30:01  2026-10-07 10:37:55  approved
+192.168.1.10    dc:a6:32:00:00:10 Raspberry Pi Trading       MQTT broker                      ARP,MQTT                    10  2026-10-07 10:30:01  2026-10-07 10:37:55  approved
+192.168.1.22    44:19:b6:00:00:22 Hikvision                  IP camera / embedded web device  ARP,DNS,HTTP,HTTPS,IRC,N  2466  2026-10-07 10:30:04  2026-10-07 10:37:50  approved
+192.168.1.5     3c:52:82:00:00:05 HP                         client                           ARP,HTTP,NTP                10  2026-10-07 10:30:06  2026-10-07 10:37:40  approved
+192.168.1.66    b8:27:eb:00:00:66 Raspberry Pi Foundation    unclassified                     ARP,MQTT,TELNET             64  2026-10-07 10:35:00  2026-10-07 10:36:10  pending
+
+7 assets, 1 pending review
+
+$ python -m iotmon read samples/iot-lab.pcap -q --utc --inventory    # second run, alerts abridged
+10:35:00  [ALERT MEDIUM] port_scan: ARP sweep from 192.168.1.66
+10:35:10  [ALERT HIGH] suspicious_port: TELNET session 192.168.1.66 -> 192.168.1.22:23
+...
+
+3546 packets, 7 devices, 7 alerts
+alerts by severity: high=4, medium=2, critical=1
+asset register data/inventory.json: 7 assets, added: none
+(no new_device alert this time: 192.168.1.66 is already in the register, pending review)
+
+$ python -m iotmon inventory approve b8:27:eb:00:00:66
+b8:27:eb:00:00:66: approved
+
+$ python -m iotmon inventory show --json    # abridged to one device
+{
+  "192.168.1.20": {
+    "ips": [
+      "192.168.1.20"
+    ],
+    "mac": "24:0a:c4:00:00:20",
+    "vendor": "Espressif (ESP32/ESP8266)",
+    "name": "temp-sensor-01",
+    "role": "MQTT client (sensor/actuator)",
+    "first_seen": "2026-10-07T10:30:01+00:00",
+    "last_seen": "2026-10-07T10:37:55+00:00",
+    "protocols": [
+      "ARP",
+      "MQTT",
+      "NTP"
+    ],
+    "services": [],
+    "connections": 3,
+    "packets": 200,
+    "bytes": 14120,
+    "status": "approved",
+    "key": "24:0a:c4:00:00:20"
+  },
+  ...
+}

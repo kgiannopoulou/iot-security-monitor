@@ -59,6 +59,7 @@ class Device:
     first_seen: float
     last_seen: float
     ips: set = field(default_factory=set)
+    last_ip: str = ""  # the address it used most recently
     vendor: str = "unknown"
     name: str = ""
     packets_sent: int = 0
@@ -69,6 +70,8 @@ class Device:
     services: set = field(default_factory=set)  # ports this device answered on
     peers: set = field(default_factory=set)
     mqtt_publisher: bool = False
+    connections: int = 0  # flows (TCP or UDP conversations) this device took part in
+    status: str = ""  # asset-register status: approved / pending / new ("" = no register)
 
     @property
     def role(self) -> str:
@@ -100,6 +103,8 @@ class Device:
             "protocols": sorted(self.protocols),
             "services": sorted(self.services),
             "peers": len(self.peers),
+            "connections": self.connections,
+            "status": self.status,
         }
 
 
@@ -108,6 +113,12 @@ class Inventory:
         self.networks = [ipaddress.ip_network(n) for n in lab_networks]
         self.devices: dict[str, Device] = {}
         self._by_ip: dict[str, str] = {}
+        # Address changes caused by the last update(), read by the device_change rule:
+        # ("ip_change", device, new_ip, previous_ips) or ("ip_conflict", device, ip, previous_owner)
+        self.changes: list[tuple] = []
+        # Connections to local addresses that have not sent a packet yet (a server
+        # is usually seen as a destination first); credited when the device appears.
+        self._pending_connections: dict[str, int] = {}
 
     def is_local(self, ip: str | None) -> bool:
         if not ip:
@@ -127,6 +138,7 @@ class Inventory:
     def update(self, rec: PacketRecord) -> Device | None:
         """Account for a packet. Returns the Device if it was seen for the first time."""
         new = None
+        self.changes = []
         if self.is_local(rec.src_ip):
             mac = rec.src_mac if rec.src_mac not in BROADCAST_MACS else None
             dev, created = self._get_or_create(rec.src_ip, mac, rec.ts)
@@ -157,10 +169,25 @@ class Inventory:
                     dst.peers.add(rec.src_ip)
         return new
 
+    def count_flow(self, client_ip: str, server_ip: str) -> None:
+        """A new conversation started: one more connection for each local end."""
+        for ip in {client_ip, server_ip}:
+            dev = self.lookup(ip)
+            if dev is not None:
+                dev.connections += 1
+            elif self.is_local(ip):
+                self._pending_connections[ip] = self._pending_connections.get(ip, 0) + 1
+
     def _get_or_create(self, ip: str, mac: str | None, ts: float) -> tuple[Device, bool]:
         key = mac or ip
         dev = self.devices.get(key)
         created = False
+        owner = self.devices.get(self._by_ip.get(ip, ""))
+        if mac and owner is not None and owner.mac and owner.mac != mac:
+            # The address was already bound to another network card.
+            self.changes.append(("ip_conflict", None, ip, owner))
+        elif dev is not None and ip not in dev.ips:
+            self.changes.append(("ip_change", dev, ip, sorted(dev.ips)))
         if dev is None:
             # An IP-keyed placeholder may exist from before we saw its MAC.
             placeholder = self.devices.pop(ip, None) if mac else None
@@ -172,5 +199,8 @@ class Inventory:
                 created = True
             self.devices[key] = dev
         dev.ips.add(ip)
+        dev.last_ip = ip
+        dev.connections += self._pending_connections.pop(ip, 0)
         self._by_ip[ip] = key
+        self.changes = [(kind, d or dev, *rest) for kind, d, *rest in self.changes]
         return dev, created

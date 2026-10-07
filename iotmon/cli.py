@@ -4,11 +4,15 @@
     python -m iotmon live -i iotlab0                  # watch an interface
     python -m iotmon report                           # summarise the database
     python -m iotmon dashboard                        # web dashboard
+    python -m iotmon inventory learn baseline.pcap    # build the asset register
+    python -m iotmon inventory show                   # list known assets
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import signal
 import sqlite3
 import sys
 from collections import Counter
@@ -16,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__
+from .assets import DEFAULT_REGISTER, AssetRegister
 from .config import load_config
 from .display import Printer
 from .pipeline import Monitor
@@ -34,6 +39,8 @@ def _add_common(p: argparse.ArgumentParser) -> None:
     p.add_argument("-q", "--quiet", action="store_true", help="print alerts only, not every packet")
     p.add_argument("--utc", action="store_true", help="print times in UTC instead of local time")
     p.add_argument("-c", "--count", type=int, help="stop after N packets")
+    p.add_argument("--inventory", metavar="JSON", nargs="?", const=DEFAULT_REGISTER,
+                   help=f"use and update the asset register (default path {DEFAULT_REGISTER})")
 
 
 def _build_monitor(args) -> Monitor:
@@ -42,7 +49,8 @@ def _build_monitor(args) -> Monitor:
     if not args.no_store:
         storage = Storage(args.db, args.out_dir, packet_csv=args.csv, reset=not args.append)
     printer = Printer(show_packets=not args.quiet, utc=args.utc)
-    return Monitor(config, storage, printer)
+    assets = AssetRegister(args.inventory) if args.inventory else None
+    return Monitor(config, storage, printer, assets)
 
 
 def _summary(mon: Monitor) -> None:
@@ -51,6 +59,11 @@ def _summary(mon: Monitor) -> None:
     if mon.alerts:
         by_sev = Counter(a.severity for a in mon.alerts)
         print("alerts by severity: " + ", ".join(f"{k}={v}" for k, v in by_sev.most_common()), file=sys.stderr)
+    if mon.assets is not None:
+        added = Counter(mon.assets.get(k)["status"] for k in mon.added_assets)
+        added_txt = ", ".join(f"{n} {status}" for status, n in sorted(added.items())) or "none"
+        print(f"asset register {mon.assets.path.as_posix()}: {len(mon.assets)} assets, added: {added_txt}",
+              file=sys.stderr)
 
 
 def cmd_read(args) -> int:
@@ -66,6 +79,7 @@ def cmd_live(args) -> int:
     from .capture import sniff_live
 
     mon = _build_monitor(args)
+    signal.signal(signal.SIGTERM, _stop)  # docker stop: shut down cleanly, flush outputs
     print(f"capturing on {args.interface or 'default interface'}"
           f"{' filter ' + repr(args.bpf) if args.bpf else ''} - Ctrl+C to stop", file=sys.stderr)
     try:
@@ -75,6 +89,10 @@ def cmd_live(args) -> int:
         return 1
     _summary(mon)
     return 0
+
+
+def _stop(signum, frame):
+    raise KeyboardInterrupt
 
 
 def cmd_report(args) -> int:
@@ -89,10 +107,10 @@ def cmd_report(args) -> int:
         return datetime.fromtimestamp(ts, tz=tz).strftime("%Y-%m-%d %H:%M:%S")
 
     print("DEVICES")
-    print(f"  {'IP':<15} {'MAC':<17} {'VENDOR':<28} {'ROLE':<30} {'SERVICES':<12} NAME")
+    print(f"  {'IP':<15} {'MAC':<17} {'VENDOR':<28} {'ROLE':<30} {'SERVICES':<12} {'CONN':>5}  NAME")
     for d in db.execute("SELECT * FROM devices ORDER BY first_seen"):
         print(f"  {d['ips']:<15} {d['mac'] or '-':<17} {d['vendor'][:28]:<28} {d['role'][:30]:<30} "
-              f"{d['services'] or '-':<12} {d['name'] or ''}")
+              f"{d['services'] or '-':<12} {d['connections'] or 0:>5}  {d['name'] or ''}")
 
     print("\nTOP FLOWS (by bytes)")
     for f in db.execute("SELECT * FROM flows ORDER BY bytes DESC LIMIT 10"):
@@ -106,6 +124,75 @@ def cmd_report(args) -> int:
     if not rows:
         print("  none")
     return 0
+
+
+def cmd_inventory_learn(args) -> int:
+    """Build the asset register from traffic you trust (every device is approved)."""
+    from .capture import read_pcap
+
+    records = read_pcap(args.pcap)
+    if args.duration is not None:
+        records = _first_seconds(records, args.duration)
+    assets = AssetRegister(args.inventory)
+    mon = Monitor(load_config(args.config), assets=assets, new_asset_status="approved")
+    mon.run(records)
+    print(f"learned {len(mon.inventory.devices)} devices from {mon.packets} packets; "
+          f"{len(mon.added_assets)} new, register {assets.path.as_posix()} now holds {len(assets)} assets",
+          file=sys.stderr)
+    return 0
+
+
+def _first_seconds(records, seconds: float):
+    end = None
+    for rec in records:
+        if end is None:
+            end = rec.ts + seconds
+        if rec.ts >= end:
+            return
+        yield rec
+
+
+def cmd_inventory_show(args) -> int:
+    assets = AssetRegister(args.inventory)
+    if not len(assets):
+        print(f"asset register {args.inventory} is empty - run 'inventory learn' or 'read --inventory'",
+              file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(assets.by_ip(), indent=2))
+        return 0
+    print(f"{'IP':<15} {'MAC':<17} {'VENDOR':<26} {'ROLE':<32} {'PROTOCOLS':<24} {'CONN':>5}  "
+          f"{'FIRST SEEN (UTC)':<19}  {'LAST SEEN (UTC)':<19}  STATUS")
+    for ip, a in assets.by_ip().items():
+        protocols = ",".join(a["protocols"])
+        print(f"{ip:<15} {a['mac'] or '-':<17} {a['vendor'][:26]:<26} {a['role'][:32]:<32} "
+              f"{protocols[:24]:<24} {a['connections']:>5}  {_short(a['first_seen'])}  "
+              f"{_short(a['last_seen'])}  {a['status']}")
+    pending = sum(a["status"] == "pending" for a in assets.assets.values())
+    print(f"\n{len(assets)} assets, {pending} pending review")
+    return 0
+
+
+def _short(iso: str) -> str:
+    return iso[:19].replace("T", " ")
+
+
+def cmd_inventory_approve(args) -> int:
+    assets = AssetRegister(args.inventory)
+    if args.all:
+        targets = [k for k, a in assets.assets.items() if a["status"] == "pending"]
+    else:
+        targets = args.devices
+    rc = 0
+    for target in targets:
+        key = assets.set_status(target, args.status)
+        if key:
+            print(f"{key}: {args.status}")
+        else:
+            print(f"error: {target} is not in {assets.path.as_posix()}", file=sys.stderr)
+            rc = 1
+    assets.save()
+    return rc
 
 
 def cmd_dashboard(args) -> int:
@@ -138,6 +225,25 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--db", default=DEFAULT_DB)
     p.add_argument("--utc", action="store_true")
     p.set_defaults(func=cmd_report)
+
+    p = sub.add_parser("inventory", help="manage the asset register (known devices)")
+    inv = p.add_subparsers(dest="action", required=True)
+    q = inv.add_parser("learn", help="build the register from a capture of trusted traffic")
+    q.add_argument("pcap")
+    q.add_argument("-d", "--duration", type=float, help="only use the first N seconds of the capture")
+    q.add_argument("--config", help="TOML file overriding the defaults")
+    q.set_defaults(func=cmd_inventory_learn)
+    q = inv.add_parser("show", help="list the assets in the register")
+    q.add_argument("--json", action="store_true", help="print the register keyed by IP address")
+    q.set_defaults(func=cmd_inventory_show)
+    q = inv.add_parser("approve", help="mark devices (MAC or IP) as approved")
+    q.add_argument("devices", nargs="*", metavar="MAC_OR_IP")
+    q.add_argument("--all", action="store_true", help="approve every pending device")
+    q.add_argument("--status", default="approved", choices=("approved", "pending"))
+    q.set_defaults(func=cmd_inventory_approve)
+    for q in inv.choices.values():
+        q.add_argument("--inventory", default=DEFAULT_REGISTER, metavar="JSON",
+                       help=f"asset register file (default {DEFAULT_REGISTER})")
 
     p = sub.add_parser("dashboard", help="serve the web dashboard")
     p.add_argument("--db", default=DEFAULT_DB)

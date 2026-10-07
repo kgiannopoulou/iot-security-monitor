@@ -560,7 +560,11 @@ TIME      SOURCE           DESTINATION      PROTOCOL  PORT  APP       INFO
 10:34:55  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp
 10:34:55  192.168.1.10     192.168.1.20     TCP       1883  MQTT      [A]
 10:35:00  192.168.1.66     192.168.1.1      ARP             ARP       who-has 192.168.1.1 tell 192.168.1.66
-10:35:00  [ALERT MEDIUM] new_device: New device on network: 192.168.1.66 (Raspberry Pi Foundation)
+10:35:00  [ALERT MEDIUM] new_device: New IoT device detected: 192.168.1.66 (Raspberry Pi Foundation)
+          IP:            192.168.1.66
+          MAC:           b8:27:eb:00:00:66
+          Vendor:        Raspberry Pi Foundation
+          First packet:  who-has 192.168.1.1 tell 192.168.1.66
 10:35:00  192.168.1.1      192.168.1.66     ARP             ARP       192.168.1.1 is-at 50:c7:bf:00:00:01
 10:35:00  192.168.1.66     192.168.1.2      ARP             ARP       who-has 192.168.1.2 tell 192.168.1.66
 10:35:00  192.168.1.20     192.168.1.10     TCP       1883  MQTT      PUBLISH factory/line1/temp

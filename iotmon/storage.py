@@ -41,7 +41,9 @@ CREATE TABLE IF NOT EXISTS devices (
     bytes_recv   INTEGER,
     protocols    TEXT,
     services     TEXT,
-    peers        INTEGER
+    peers        INTEGER,
+    connections  INTEGER,
+    status       TEXT
 );
 
 CREATE TABLE IF NOT EXISTS flows (
@@ -86,6 +88,11 @@ class Storage:
         self.db = sqlite3.connect(self.db_path)
         self.db.execute("PRAGMA journal_mode=WAL")  # dashboard reads while we write
         self.db.executescript(SCHEMA)
+        # Databases created before the asset register lack the Week 2 columns.
+        cols = {r[1] for r in self.db.execute("PRAGMA table_info(devices)")}
+        for col, kind in (("connections", "INTEGER"), ("status", "TEXT")):
+            if col not in cols:
+                self.db.execute(f"ALTER TABLE devices ADD COLUMN {col} {kind}")
 
         self.out_dir = Path(out_dir) if out_dir else self.db_path.parent
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -133,8 +140,10 @@ class Storage:
             r["services"] = ",".join(str(p) for p in r["services"])
             rows.append(r)
         self.db.executemany(
-            "INSERT OR REPLACE INTO devices VALUES (:key,:mac,:ips,:vendor,:name,:role,:first_seen,:last_seen,"
-            ":packets_sent,:packets_recv,:bytes_sent,:bytes_recv,:protocols,:services,:peers)",
+            "INSERT OR REPLACE INTO devices (key, mac, ips, vendor, name, role, first_seen, last_seen,"
+            " packets_sent, packets_recv, bytes_sent, bytes_recv, protocols, services, peers, connections, status)"
+            " VALUES (:key,:mac,:ips,:vendor,:name,:role,:first_seen,:last_seen,:packets_sent,:packets_recv,"
+            ":bytes_sent,:bytes_recv,:protocols,:services,:peers,:connections,:status)",
             rows,
         )
 
