@@ -29,7 +29,8 @@ from .models import SEVERITIES, rule_id
 from .storage import ACTIVE_STATUSES
 
 SEVERITY_ORDER = tuple(reversed(SEVERITIES))  # critical first
-SEVERITY_WEIGHT = {"critical": 10, "high": 5, "medium": 2, "low": 1}
+SEVERITY_WEIGHT = {"critical": 10, "high": 5, "medium": 2, "low": 1, "info": 0}
+ACTIONABLE = ("low", "medium", "high", "critical")  # everything above INFO
 UNREVIEWED = ("pending", "new")  # asset-register statuses that need a decision
 LIVE_STALE_S = 30  # a live run that has not committed for this long has stopped
 
@@ -101,7 +102,7 @@ def _device_risk(devices: list[dict], active: list[dict]) -> list[dict]:
             r = risk.setdefault(d["key"], {
                 "key": d["key"], "ips": d["ips"], "mac": d.get("mac"), "vendor": d.get("vendor"),
                 "role": d.get("role"), "status": d.get("status") or "", "alerts": 0, "score": 0.0,
-                "top_severity": "low", "rules": []})
+                "top_severity": "info", "rules": []})
             if a["id"] in r.setdefault("_seen", set()):
                 continue  # src and dst are the same device
             r["_seen"].add(a["id"])
@@ -208,11 +209,12 @@ def posture(state: dict, active: list[dict], unreviewed: list[dict]) -> dict:
     if closed:
         reasons.append(f"{closed} alert{'s' if closed != 1 else ''} already triaged as resolved or false positive")
 
+    actionable = [a for a in active if a["severity"] in ACTIONABLE]  # INFO never escalates the posture
     if count["critical"]:
         level = "CRITICAL"
     elif count["high"]:
         level = "AT RISK"
-    elif active or unreviewed:
+    elif actionable or unreviewed:
         level = "WATCH"
     else:
         level = "OK"
@@ -222,7 +224,8 @@ def posture(state: dict, active: list[dict], unreviewed: list[dict]) -> dict:
 
 # -- terminal rendering ------------------------------------------------------ #
 LEVEL_COLOUR = {"CRITICAL": "\033[1;31m", "AT RISK": "\033[31m", "WATCH": "\033[33m", "OK": "\033[32m"}
-SEV_COLOUR = {"critical": "\033[1;31m", "high": "\033[31m", "medium": "\033[33m", "low": "\033[36m"}
+SEV_COLOUR = {"critical": "\033[1;31m", "high": "\033[31m", "medium": "\033[33m", "low": "\033[36m",
+              "info": "\033[90m"}
 RESET = "\033[0m"
 
 
@@ -312,3 +315,365 @@ def write_csv(alerts: list[dict], out) -> int:
     w.writeheader()
     w.writerows(rows)
     return len(rows)
+
+
+# -- risk model (Week 8) ---------------------------------------------------- #
+# A documented, project-specific heuristic (NOT a universal standard): an
+# asset's intrinsic exposure (its stored risk_score: zone, role, open
+# services, internet exposure) plus points for the active alerts that name it.
+RISK_STATUS = (("CRITICAL", 80), ("HIGH", 60), ("MEDIUM", 40), ("LOW", 20), ("INFO", 0))
+# rule ID -> (label shown in the breakdown, points). Deduplicated by label.
+ALERT_RISK = {
+    "DET-001": ("Unrecognised device", 15), "DET-010": ("Unrecognised OT asset", 20),
+    "DET-002": ("Scanning activity", 30), "DET-003": ("Abnormal connection rate", 15),
+    "DET-004": ("Suspicious service", 25), "DET-005": ("External connection", 40),
+    "DET-006": ("Traffic spike", 20), "DET-007": ("Repeated failures / brute force", 20),
+    "DET-008": ("Address change / spoofing", 20), "DET-009": ("Abnormal MQTT activity", 15),
+    "DET-011": ("Unauthorized PLC access", 30), "DET-012": ("Cross-zone (IT->OT) access", 25),
+    "DET-013": ("Unexpected protocol in OT", 20), "DET-014": ("Abnormal Modbus rate", 15),
+    "DET-015": ("OT device reaching internet", 40),
+}
+
+
+def risk_status(score: int) -> str:
+    for status, floor in RISK_STATUS:
+        if score >= floor:
+            return status
+    return "INFO"
+
+
+def enrich_risk(device: dict, device_alerts: list[dict]) -> dict:
+    """Combine an asset's base exposure with its active alerts into a 0-100
+    score, a status band, and a breakdown the analyst can read."""
+    base = int(device.get("risk_score") or 0)
+    breakdown = [{"reason": "Base exposure (zone, role, services)", "points": base}]
+    best: dict[str, int] = {}
+    for a in device_alerts:
+        rid = a.get("rule_id") or ""
+        if rid not in ALERT_RISK:
+            continue
+        label, points = ALERT_RISK[rid]
+        if rid == "DET-011" and a.get("details", {}).get("write"):
+            label, points = "Unauthorized PLC write", 40
+        best[label] = max(best.get(label, 0), points)
+    for label, points in sorted(best.items(), key=lambda kv: -kv[1]):
+        breakdown.append({"reason": label, "points": points})
+    score = min(100, base + sum(best.values()))
+    return {"score": score, "status": risk_status(score), "base": base, "breakdown": breakdown}
+
+
+# -- analyst alert view (Week 8) -------------------------------------------- #
+DEFAULT_PROTO = {"mqtt_activity": "MQTT", "unauthorized_modbus": "Modbus/TCP", "modbus_rate": "Modbus/TCP",
+                 "ot_segmentation": "Modbus/TCP", "ot_new_asset": "Modbus/TCP"}
+
+
+def _device_card(con, ip: str | None, active: list[dict]) -> dict | None:
+    if not ip:
+        return None
+    rows = _rows(con, "SELECT * FROM devices WHERE ',' || ips || ',' LIKE '%,' || ? || ',%'", (ip,))
+    dev = rows[0] if rows else {"ips": ip, "risk_score": 0}
+    mine = [a for a in active if a.get("src") == ip or a.get("dst") == ip]
+    return {"ip": ip, "name": dev.get("name") or "", "role": dev.get("role") or "",
+            "zone": dev.get("zone") or "", "device_type": dev.get("device_type") or "",
+            "vendor": dev.get("vendor") or "", "risk": enrich_risk(dev, mine)}
+
+
+def _protocol(a: dict) -> str:
+    d = a.get("details", {})
+    if d.get("app"):
+        return d["app"]
+    if d.get("protocol") and d["protocol"] not in ("TCP", "UDP"):
+        return d["protocol"]
+    return DEFAULT_PROTO.get(a.get("rule"), d.get("protocol") or "")
+
+
+def alert_detail(db_path, alert_id: int) -> dict | None:
+    """The full investigation card for one alert: labelled source and
+    destination, protocol, reason, ATT&CK and the recommended response."""
+    from .models import rule_meta
+
+    con = connect_ro(db_path)
+    if con is None:
+        return None
+    try:
+        rows = _rows(con, "SELECT * FROM alerts WHERE id = ?", (alert_id,))
+        if not rows:
+            return None
+        a = rows[0]
+        a["details"] = json.loads(a.get("details") or "{}")
+        a["rule_id"] = a.get("rule_id") or ""
+        active = [dict(r, details=json.loads(r.get("details") or "{}"))
+                  for r in _rows(con, f"SELECT * FROM alerts WHERE {_ACTIVE}")]
+        run = _rows(con, "SELECT * FROM runs WHERE id = ?", (a.get("run_id"),))
+        meta = rule_meta(a.get("rule") or a["rule_id"])
+        src = _device_card(con, a.get("src"), active)
+        dst = _device_card(con, a.get("dst"), active)
+        source = run[0]["source"] if run else None
+        pcap = bool(source and source not in (None, "") and run[0]["mode"] == "read"
+                    and Path(source).exists())
+        return {
+            "id": alert_id, "alert_ref": f"ALT-{alert_id:04d}",
+            "ts": a["ts"], "severity": a["severity"], "status": a.get("status", "open"),
+            "rule_id": a["rule_id"], "rule": a.get("rule"), "title": a.get("title"),
+            "note": a.get("note"), "protocol": _protocol(a), "mitre": a.get("mitre") or "",
+            "attack": meta.get("attack", []), "response": meta.get("response", []),
+            "description": meta.get("description", "").strip(),
+            "source": src, "destination": dst, "evidence": a["details"],
+            "pcap": {"available": pcap, "capture": source if pcap else None},
+        }
+    finally:
+        con.close()
+
+
+def render_alert_card(d: dict, utc: bool = False, colour: bool = False, width: int = 64,
+                      ascii: bool = False) -> str:
+    tz = timezone.utc if utc else None
+    rule_line = ("-" if ascii else "─") * width
+
+    def paint(t, code):
+        return f"{code}{t}{RESET}" if colour and code else t
+
+    def endpoint(label, c):
+        if not c:
+            return [f"{label}:", "  (not a tracked device)"]
+        tag = f"  risk {c['risk']['score']}/100 {c['risk']['status']}"
+        bits = [b for b in (c["device_type"], c["role"], c["zone"] and f"{c['zone']} zone") if b]
+        return [f"{label}:", f"  {c['ip']}" + (f"  {c['name']}" if c["name"] else ""),
+                f"  {' / '.join(bits)}" if bits else "", tag]
+
+    L = ["SECURITY ALERT", rule_line,
+         f"{'Alert ID:':<14}{d['alert_ref']}",
+         f"{'Severity:':<14}" + paint(d["severity"].upper(), SEV_COLOUR.get(d["severity"])),
+         f"{'Rule:':<14}{d['rule_id']}  {d['rule']}",
+         f"{'Time:':<14}{datetime.fromtimestamp(d['ts'], tz=tz).strftime('%Y-%m-%d %H:%M:%S')}",
+         f"{'Status:':<14}{d['status']}", ""]
+    L += endpoint("Source", d["source"]) + [""]
+    L += endpoint("Destination", d["destination"]) + [""]
+    if d["protocol"]:
+        L += [f"{'Protocol:':<14}{d['protocol']}", ""]
+    L += ["Reason:"] + textwrap.wrap(d["title"], width, initial_indent="  ", subsequent_indent="  ")
+    if d["response"]:
+        L += ["", "Recommended action:"] + [f"  {i}. {s}" for i, s in enumerate(d["response"], 1)]
+    if d["attack"]:
+        L += ["", "MITRE ATT&CK:"] + [f"  - {t}" for t in d["attack"]]
+    if d["pcap"]["available"]:
+        L += ["", f"PCAP: {d['pcap']['capture']}  (iotmon pcap {d['id']} -o alert.pcap)"]
+    return "\n".join(x for x in L if x is not None)
+
+
+# -- security report (Week 8) ----------------------------------------------- #
+OT_TYPES = {"PLC", "HMI", "EWS"}
+IOT_TYPES = {"MQTT broker", "IoT sensor/actuator", "IP camera"}
+
+
+def _classify(dev: dict) -> str:
+    if dev.get("zone") == "OT" or dev.get("device_type") in OT_TYPES:
+        return "ot"
+    if dev.get("device_type") in IOT_TYPES or "MQTT" in (dev.get("protocols") or ""):
+        return "iot"
+    return "unknown"
+
+
+def security_report(db_path) -> dict:
+    con = connect_ro(db_path)
+    try:
+        devices = _rows(con, "SELECT * FROM devices")
+        alerts = [dict(r, details=json.loads(r.get("details") or "{}"))
+                  for r in _rows(con, "SELECT * FROM alerts")]
+        traffic = _rows(con, "SELECT COALESCE(SUM(packets),0) p, COALESCE(SUM(bytes),0) b,"
+                             " MIN(minute) first, MAX(minute) last FROM traffic")[0]
+        runs = _rows(con, "SELECT * FROM runs ORDER BY id")
+        active = [a for a in alerts if a.get("status", "open") in ACTIVE_STATUSES]
+    finally:
+        if con is not None:
+            con.close()
+
+    kinds = {"iot": 0, "ot": 0, "unknown": 0}
+    for d in devices:
+        kinds[_classify(d)] += 1
+    by_sev = {s: sum(a["severity"] == s for a in alerts) for s in SEVERITY_ORDER}
+
+    most_active = max(devices, key=lambda d: (d.get("packets_sent", 0) or 0) + (d.get("packets_recv", 0) or 0),
+                      default=None)
+    ranked = []
+    for d in devices:
+        ips = {ip for ip in (d.get("ips") or "").split(",") if ip}
+        mine = [a for a in active if a.get("src") in ips or a.get("dst") in ips]
+        ranked.append((d, enrich_risk(d, mine)))
+    highest = max(ranked, key=lambda dr: dr[1]["score"], default=None)
+    rule_counts: dict[tuple, int] = {}
+    for a in alerts:
+        rule_counts[(a.get("rule_id") or "", a.get("rule") or "")] = rule_counts.get(
+            (a.get("rule_id") or "", a.get("rule") or ""), 0) + 1
+    top = max(rule_counts.items(), key=lambda kv: kv[1], default=None)
+
+    def who(d):
+        return (d.get("name") or d.get("ips") or "?") if d else "-"
+
+    return {
+        "period": {"first": traffic["first"], "last": traffic["last"],
+                   "started": runs[0]["started"] if runs else None,
+                   "ended": runs[-1]["ended"] if runs else None, "runs": len(runs)},
+        "assets": {"total": len(devices), **kinds},
+        "traffic": {"packets": traffic["p"], "bytes": traffic["b"]},
+        "alerts": {"total": len(alerts), "active": len(active), "by_severity": by_sev},
+        "most_active": {"who": who(most_active), "ip": most_active.get("ips") if most_active else None,
+                        "packets": ((most_active.get("packets_sent", 0) or 0)
+                                    + (most_active.get("packets_recv", 0) or 0)) if most_active else 0},
+        "highest_risk": {"who": who(highest[0]), "ip": highest[0].get("ips"),
+                         "device_type": highest[0].get("device_type"),
+                         **highest[1]} if highest else None,
+        "top_detection": {"rule_id": top[0][0], "rule": top[0][1], "count": top[1]} if top else None,
+    }
+
+
+def _fmt_period(p: dict, utc: bool) -> str:
+    tz = timezone.utc if utc else None
+    if p["first"] is None:
+        return "no traffic recorded"
+    f = datetime.fromtimestamp(p["first"], tz=tz).strftime("%Y-%m-%d %H:%M")
+    t = datetime.fromtimestamp(p["last"] + 60, tz=tz).strftime("%H:%M")
+    return f"{f} - {t}{' UTC' if utc else ''}"
+
+
+def render_report(r: dict, utc: bool = False, width: int = 60) -> str:
+    rule = "=" * width
+    sev = r["alerts"]["by_severity"]
+    L = ["IoT/OT SECURITY REPORT", rule, "",
+         "Monitoring period", f"  {_fmt_period(r['period'], utc)}", "",
+         f"Assets discovered:        {r['assets']['total']:>8}",
+         f"  IoT devices:            {r['assets']['iot']:>8}",
+         f"  OT devices:             {r['assets']['ot']:>8}",
+         f"  Unknown devices:        {r['assets']['unknown']:>8}", "",
+         f"Traffic analyzed:         {r['traffic']['packets']:>8,}  ({_fmt_bytes(r['traffic']['bytes'])})", "",
+         "Alerts", "-" * width,
+         f"  Critical:               {sev['critical']:>8}",
+         f"  High:                   {sev['high']:>8}",
+         f"  Medium:                 {sev['medium']:>8}",
+         f"  Low:                    {sev['low']:>8}",
+         f"  Info:                   {sev['info']:>8}", ""]
+    if r["most_active"]["ip"]:
+        L += ["Most Active Asset", f"  {_lbl(r['most_active']['who'], r['most_active']['ip'])}"
+              f"  {r['most_active']['packets']:,} packets", ""]
+    hr = r["highest_risk"]
+    if hr:
+        L += ["Highest Risk Asset", f"  {_lbl(hr['who'], hr['ip'])}  {hr['device_type'] or ''}".rstrip(),
+              f"  Risk Score: {hr['score']}/100  {hr['status']}"]
+        for b in hr["breakdown"]:
+            if b["points"]:
+                L.append(f"    {b['reason']:<34} +{b['points']}")
+        L.append("")
+    if r["top_detection"]:
+        td = r["top_detection"]
+        L += ["Top Detection", f"  {td['rule_id']} {td['rule']}  ({td['count']} alerts)"]
+    return "\n".join(L)
+
+
+def render_report_md(r: dict, utc: bool = False) -> str:
+    sev = r["alerts"]["by_severity"]
+    hr = r["highest_risk"]
+    lines = [
+        "# IoT/OT Security Report", "",
+        f"**Monitoring period:** {_fmt_period(r['period'], utc)}", "",
+        "## Assets", "",
+        "| | Count |", "|---|---|",
+        f"| Assets discovered | {r['assets']['total']} |",
+        f"| IoT devices | {r['assets']['iot']} |",
+        f"| OT devices | {r['assets']['ot']} |",
+        f"| Unknown devices | {r['assets']['unknown']} |", "",
+        f"**Traffic analyzed:** {r['traffic']['packets']:,} packets ({_fmt_bytes(r['traffic']['bytes'])})", "",
+        "## Alerts", "",
+        "| Severity | Count |", "|---|---|",
+        f"| Critical | {sev['critical']} |", f"| High | {sev['high']} |", f"| Medium | {sev['medium']} |",
+        f"| Low | {sev['low']} |", f"| Info | {sev['info']} |", "",
+    ]
+    if r["most_active"]["ip"]:
+        lines += [f"**Most active asset:** {_lbl(r['most_active']['who'], r['most_active']['ip'])}, "
+                  f"{r['most_active']['packets']:,} packets", ""]
+    if hr:
+        lines += [f"**Highest risk asset:** {_lbl(hr['who'], hr['ip'])} — **{hr['score']}/100 {hr['status']}**", "",
+                  "| Factor | Points |", "|---|---|"]
+        lines += [f"| {b['reason']} | +{b['points']} |" for b in hr["breakdown"] if b["points"]]
+        lines += [""]
+    if r["top_detection"]:
+        td = r["top_detection"]
+        lines += [f"**Top detection:** {td['rule_id']} {td['rule']} ({td['count']} alerts)"]
+    return "\n".join(lines) + "\n"
+
+
+def render_report_html(r: dict, utc: bool = False) -> str:
+    sev = r["alerts"]["by_severity"]
+    hr = r["highest_risk"]
+    chips = "".join(
+        f'<span class="chip {s}"><b>{sev[s]}</b> {s}</span>' for s in SEVERITY_ORDER)
+    rows = ""
+    if hr:
+        rows = "".join(f"<tr><td>{b['reason']}</td><td>+{b['points']}</td></tr>"
+                       for b in hr["breakdown"] if b["points"])
+    gen = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    risk_block = ""
+    if hr:
+        risk_block = (f"<h2>Highest-risk asset</h2><p class='big'>{_esc(hr['who'])} "
+                      f"<span class='muted'>({_esc(hr['ip'])})</span></p>"
+                      f"<p><span class='score {hr['status'].lower()}'>{hr['score']}/100 · {hr['status']}</span></p>"
+                      f"<table class='bd'>{rows}</table>")
+    most = ""
+    if r["most_active"]["ip"]:
+        most = (f"<h2>Most active asset</h2><p class='big'>{_esc(r['most_active']['who'])} "
+                f"<span class='muted'>({_esc(r['most_active']['ip'])})</span></p>"
+                f"<p>{r['most_active']['packets']:,} packets</p>")
+    top = ""
+    if r["top_detection"]:
+        td = r["top_detection"]
+        top = f"<h2>Top detection</h2><p class='big'>{td['rule_id']} {_esc(td['rule'])}</p><p>{td['count']} alerts</p>"
+    a = r["assets"]
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>IoT/OT Security Report</title>
+<style>
+:root{{--ink:#0b0b0b;--muted:#6b6a66;--line:#e1e0d9;--card:#fff;--bg:#f6f6f3;
+--critical:#d03b3b;--high:#ec835a;--medium:#fab219;--low:#3a86c8;--info:#8a8a8a;--good:#0ca30c}}
+*{{box-sizing:border-box}}body{{margin:0;background:var(--bg);color:var(--ink);
+font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:32px}}
+.wrap{{max-width:760px;margin:0 auto}}h1{{font-size:24px;margin:0 0 4px}}
+.sub{{color:var(--muted);margin:0 0 24px}}.grid{{display:grid;gap:16px;grid-template-columns:1fr 1fr}}
+.card{{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}}
+.card.full{{grid-column:1/-1}}h2{{font-size:13px;text-transform:uppercase;letter-spacing:.05em;
+color:var(--muted);margin:0 0 10px}}.big{{font-size:20px;font-weight:600;margin:4px 0}}
+.muted{{color:var(--muted);font-weight:400}}.nums{{display:flex;gap:28px;flex-wrap:wrap}}
+.nums div span{{display:block;font-size:28px;font-weight:700}}.nums div small{{color:var(--muted)}}
+.chips{{display:flex;gap:8px;flex-wrap:wrap}}.chip{{padding:4px 10px;border-radius:999px;
+border:1px solid var(--line);font-size:13px}}.chip b{{font-variant-numeric:tabular-nums}}
+.chip.critical{{border-color:var(--critical);color:var(--critical)}}.chip.high{{border-color:var(--high);color:var(--high)}}
+.chip.medium{{border-color:var(--medium);color:#8a6400}}.chip.low{{border-color:var(--low);color:var(--low)}}
+.chip.info{{color:var(--info)}}.score{{font-weight:700;padding:3px 10px;border-radius:6px;color:#fff}}
+.score.critical{{background:var(--critical)}}.score.high{{background:var(--high)}}.score.medium{{background:var(--medium)}}
+.score.low{{background:var(--low)}}.score.info{{background:var(--info)}}
+table.bd{{width:100%;border-collapse:collapse;margin-top:10px;font-size:14px}}
+table.bd td{{border-top:1px solid var(--line);padding:5px 0}}table.bd td:last-child{{text-align:right;color:var(--muted)}}
+@media(max-width:620px){{.grid{{grid-template-columns:1fr}}}}
+</style></head><body><div class="wrap">
+<h1>IoT / OT Security Report</h1>
+<p class="sub">Monitoring period: {_fmt_period(r['period'], utc)} · generated {gen}</p>
+<div class="grid">
+<div class="card"><h2>Assets discovered</h2><div class="nums">
+<div><span>{a['total']}</span><small>total</small></div>
+<div><span>{a['iot']}</span><small>IoT</small></div>
+<div><span>{a['ot']}</span><small>OT</small></div>
+<div><span>{a['unknown']}</span><small>unknown</small></div></div></div>
+<div class="card"><h2>Traffic analyzed</h2><p class="big">{r['traffic']['packets']:,}</p>
+<p class="muted">packets · {_fmt_bytes(r['traffic']['bytes'])}</p></div>
+<div class="card full"><h2>Alerts ({r['alerts']['total']} total, {r['alerts']['active']} active)</h2>
+<div class="chips">{chips}</div></div>
+<div class="card">{most or '<h2>Most active asset</h2><p class="muted">-</p>'}</div>
+<div class="card">{risk_block or '<h2>Highest-risk asset</h2><p class="muted">-</p>'}</div>
+<div class="card full">{top or '<h2>Top detection</h2><p class="muted">-</p>'}</div>
+</div></div></body></html>"""
+
+
+def _esc(s) -> str:
+    return (str(s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def _lbl(who, ip) -> str:
+    """'<name> (<ip>)' when the asset has a name, else just the IP."""
+    return f"{who} ({ip})" if who and who != ip else str(ip)

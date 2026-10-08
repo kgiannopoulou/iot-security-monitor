@@ -1,0 +1,37 @@
+$ iotmon alert 4 --utc   # the critical unauthorized PLC write from the OT sample
+
+SECURITY ALERT
+----------------------------------------------------------------
+Alert ID:     ALT-0004
+Severity:     CRITICAL
+Rule:         DET-011  unauthorized_modbus
+Time:         2026-10-07 10:35:20
+Status:       open
+
+Source:
+  192.168.1.50
+  Modbus client / Modbus/TCP client (engineering / HMI) / IT zone
+  risk 100/100 CRITICAL
+
+Destination:
+  192.168.10.20
+  PLC / PLC (Modbus/TCP server) / OT zone
+  risk 100/100 CRITICAL
+
+Protocol:     Modbus/TCP
+
+Reason:
+  Unauthorized Modbus client: 192.168.1.50 wrote to PLC
+  192.168.10.20 (unit 1, Write Single Register)
+
+Recommended action:
+  1. Identify the source and whether it is an authorised engineering station
+  2. For a write, assess the impact on the physical process immediately
+  3. Block the client at the switch and verify the PLC's register values
+
+MITRE ATT&CK:
+  - T1021 Remote Services
+  - T0855 Unauthorized Command Message (ICS)
+  - T0836 Modify Parameter (ICS)
+
+PCAP: samples/ot-lab.pcap  (iotmon pcap 4 -o alert.pcap)

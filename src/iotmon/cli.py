@@ -16,6 +16,9 @@
     python -m iotmon alerts export -o alerts.csv      # export for a report or a SIEM
     python -m iotmon db info                          # schema, row counts, monitoring runs
     python -m iotmon rules -v                         # detection rules and their thresholds
+    python -m iotmon alert 4                           # the analyst investigation card for an alert
+    python -m iotmon pcap 4 -o alert.pcap             # carve the related packets for Wireshark
+    python -m iotmon summary --format html -o report.html   # a SOC security report
 """
 
 from __future__ import annotations
@@ -338,6 +341,72 @@ def cmd_alerts_triage(args) -> int:
     return 0 if len(found) == len(set(args.ids)) else 1
 
 
+def cmd_alert(args) -> int:
+    """The analyst investigation card for one alert."""
+    from .state import alert_detail, render_alert_card
+
+    if not _need_db(args.db):
+        return 1
+    detail = alert_detail(args.db, args.id)
+    if detail is None:
+        print(f"error: no alert {args.id} in {args.db}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(detail, indent=2, default=str))
+        return 0
+    print(render_alert_card(detail, utc=args.utc, ascii=not _can_print("─"),
+                            colour=sys.stdout.isatty() and not os.environ.get("NO_COLOR")))
+    return 0
+
+
+def cmd_pcap(args) -> int:
+    """Carve the packets related to an alert out of its source capture."""
+    from .state import alert_detail
+    from .pcaptools import carve
+
+    if not _need_db(args.db):
+        return 1
+    detail = alert_detail(args.db, args.id)
+    if detail is None:
+        print(f"error: no alert {args.id} in {args.db}", file=sys.stderr)
+        return 1
+    if not detail["pcap"]["available"]:
+        print("error: this alert has no retained capture (live run, or the pcap has moved). "
+              "PCAP carving works on alerts from `iotmon read FILE.pcap`.", file=sys.stderr)
+        return 1
+    hosts = {detail["source"]["ip"] if detail["source"] else None,
+             detail["destination"]["ip"] if detail["destination"] else None}
+    out = args.output or f"alert-{args.id}.pcap"
+    n = carve(detail["pcap"]["capture"], out, hosts, detail["ts"], window=args.window)
+    print(f"wrote {n} packets around {detail['alert_ref']} ({', '.join(sorted(h for h in hosts if h))}) "
+          f"to {out}", file=sys.stderr)
+    print(out)
+    return 0
+
+
+def cmd_summary(args) -> int:
+    """The SOC-style security report."""
+    from .state import render_report, render_report_html, render_report_md, security_report
+
+    if not _need_db(args.db):
+        return 1
+    report = security_report(args.db)
+    if args.format == "json":
+        text = json.dumps(report, indent=2, default=str)
+    elif args.format == "md":
+        text = render_report_md(report, utc=args.utc)
+    elif args.format == "html":
+        text = render_report_html(report, utc=args.utc)
+    else:
+        text = render_report(report, utc=args.utc)
+    if args.output:
+        Path(args.output).write_text(text, encoding="utf-8")
+        print(f"report written to {args.output}", file=sys.stderr)
+    else:
+        print(text)
+    return 0
+
+
 def cmd_alerts_export(args) -> int:
     from .state import export_rows, write_csv
 
@@ -535,6 +604,8 @@ def cmd_rules(args) -> int:
                 if k != "enabled":
                     print(f"{'':<12}{k} = {v}")
             print(f"{'':<12}ATT&CK: {'; '.join(r['attack'])}")
+            if r.get("response"):
+                print(f"{'':<12}Response: {r['response'][0]}")
     return 0
 
 
@@ -589,7 +660,7 @@ def main(argv: list[str] | None = None) -> int:
 
     filters = argparse.ArgumentParser(add_help=False)
     filters.add_argument("--db", default=DEFAULT_DB)
-    filters.add_argument("--severity", choices=("low", "medium", "high", "critical"))
+    filters.add_argument("--severity", choices=("info", "low", "medium", "high", "critical"))
     filters.add_argument("--status", choices=(*ALERT_STATUSES, "active"),
                          help="triage status; 'active' = open or acknowledged")
     filters.add_argument("--rule", help="rule ID or name, e.g. DET-002 or port_scan")
@@ -618,6 +689,27 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("-o", "--output", help="file to write (default stdout)")
     q.add_argument("--format", choices=("csv", "json"), default="csv")
     q.set_defaults(func=cmd_alerts_export)
+
+    p = sub.add_parser("alert", help="the full analyst investigation card for one alert")
+    p.add_argument("id", type=int, metavar="ID")
+    p.add_argument("--db", default=DEFAULT_DB)
+    p.add_argument("--utc", action="store_true")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_alert)
+
+    p = sub.add_parser("pcap", help="carve the packets related to an alert into a .pcap (for Wireshark)")
+    p.add_argument("id", type=int, metavar="ID")
+    p.add_argument("-o", "--output", help="output file (default alert-<id>.pcap)")
+    p.add_argument("-w", "--window", type=float, default=30.0, help="seconds around the alert to include")
+    p.add_argument("--db", default=DEFAULT_DB)
+    p.set_defaults(func=cmd_pcap)
+
+    p = sub.add_parser("summary", help="a SOC-style security report (text / markdown / html / json)")
+    p.add_argument("--db", default=DEFAULT_DB)
+    p.add_argument("--format", choices=("text", "md", "html", "json"), default="text")
+    p.add_argument("-o", "--output", help="file to write (default stdout)")
+    p.add_argument("--utc", action="store_true")
+    p.set_defaults(func=cmd_summary)
 
     p = sub.add_parser("db", help="database information and retention")
     dbp = p.add_subparsers(dest="action", required=True)

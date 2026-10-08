@@ -128,6 +128,21 @@ def create_app(db_path: str | Path, read_only: bool = False) -> Flask:
             "topics": query("SELECT * FROM mqtt_topics ORDER BY topic"),
         })
 
+    @app.get("/api/alert/<int:alert_id>")
+    def alert(alert_id: int):
+        """The analyst investigation card for one alert (Week 8)."""
+        from ..state import alert_detail
+        detail = alert_detail(db_path, alert_id)
+        if detail is None:
+            abort(404, f"no alert {alert_id}")
+        return jsonify(detail)
+
+    @app.get("/api/report")
+    def report():
+        """The SOC security report as JSON (Week 8)."""
+        from ..state import security_report
+        return jsonify(security_report(db_path))
+
     @app.get("/api/modbus")
     def modbus():
         """Modbus/TCP conversations and the PLC servers (Week 7, OT)."""

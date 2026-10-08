@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from .models import Alert, PacketRecord
 
 HEADER = f"{'TIME':<9} {'SOURCE':<16} {'DESTINATION':<16} {'PROTOCOL':<8} {'PORT':>5}  {'APP':<9} INFO"
-COLOURS = {"low": "\033[36m", "medium": "\033[33m", "high": "\033[31m", "critical": "\033[1;31m"}
+COLOURS = {"info": "\033[90m", "low": "\033[36m", "medium": "\033[33m", "high": "\033[31m", "critical": "\033[1;31m"}
 RESET = "\033[0m"
 # Inventory events get an indented detail block under the alert line.
 DETAIL_RULES = {

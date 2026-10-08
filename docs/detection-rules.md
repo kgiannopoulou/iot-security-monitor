@@ -5,7 +5,7 @@ thresholds are in [`rules/detection_rules.yaml`](../rules/detection_rules.yaml) 
 overridden with `--config site.yaml`. The design rationale and the test
 scenarios are in the [Week 3 write-up](03-detection-engine.md).
 
-Design principles:
+Each rule declares its possible **severities** on the five-level scale (INFO · LOW · MEDIUM · HIGH · CRITICAL), its verified **MITRE ATT&CK / ICS** techniques, and a **response** playbook for the analyst (Week 8). Design principles:
 
 * **Thresholds over time windows, not "if port == X".** Every rule counts
   something (ports, hosts, connections, failures, bytes) inside a window

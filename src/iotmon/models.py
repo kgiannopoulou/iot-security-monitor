@@ -43,22 +43,35 @@ KNOWN_SERVICES: dict[int, str] = {
     47808: "BACNET",
 }
 
-SEVERITIES = ("low", "medium", "high", "critical")
+# Analyst severity scale, lowest to highest. INFO is a non-actionable
+# notice (it never raises the security posture); LOW and up need attention.
+SEVERITIES = ("info", "low", "medium", "high", "critical")
 
 # Detector name -> (rule ID, short name), from rules/detection_rules.yaml.
 # DET-001..005 are the core detection rules; 006..009 add evidence to an
 # incident (volume, failures, address changes, MQTT behaviour).
 RULES: dict[str, tuple[str, str]] = {}
+# Full rule metadata (name, severities, ATT&CK, response playbook) keyed by
+# both detector name and rule ID, for the analyst alert view (Week 8).
+RULE_META: dict[str, dict] = {}
 
 
 def register_rules(rules: list[dict]) -> None:
-    """Use a rule catalogue (from config.load_rules) for rule IDs and names."""
+    """Use a rule catalogue (from config.load_rules) for rule IDs, names and metadata."""
     RULES.clear()
-    RULES.update({r["detector"]: (r["id"], r["name"]) for r in rules})
+    RULE_META.clear()
+    for r in rules:
+        RULES[r["detector"]] = (r["id"], r["name"])
+        RULE_META[r["detector"]] = RULE_META[r["id"]] = r
 
 
 def rule_id(rule: str) -> str:
     return RULES.get(rule, (rule, ""))[0]
+
+
+def rule_meta(rule: str) -> dict:
+    """Rule metadata by detector name or rule ID (empty dict if unknown)."""
+    return RULE_META.get(rule, {})
 
 
 def service_port(sport: int | None, dport: int | None) -> int | None:

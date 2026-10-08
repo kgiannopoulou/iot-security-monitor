@@ -769,7 +769,7 @@ class MqttActivityDetector(Detector):
                                 "T0801 Monitor Process State / T0861 Point & Tag Identification (ICS)",
                                 topic=ev.topic, scope=scope,
                                 usual_subscriptions=sorted(prof.mqtt_subscribe) if prof else [])]
-        return [self._alert(rec, ev, "low",
+        return [self._alert(rec, ev, "info",
                             f"New MQTT subscription: {ev.ip} subscribed to '{ev.topic}'",
                             "T0801 Monitor Process State (ICS)",
                             topic=ev.topic, scope=scope or "single topic",

@@ -27,6 +27,7 @@ camera starts calling a botnet C2 server (CRITICAL).*
 [Implementation](#3-implementation) ·
 [Detections](#4-detections) ·
 [OT / ICS](#ot--ics-industrial-security) ·
+[Analyst view](#soc-analyst-view) ·
 [Demonstration](#5-demonstration) ·
 [Results](#6-results) ·
 [Limitations](#7-limitations) ·
@@ -177,6 +178,23 @@ HMI. Details: **[Week 7: OT/ICS expansion](docs/07-ot-ics-expansion.md)**.
 
 ![The OT dashboard: Modbus conversations, zones and asset risk](screenshots/dashboard-ot.png)
 
+### SOC analyst view
+
+Week 8 turns detections into investigations. Severity is a five-level scale
+(**INFO · LOW · MEDIUM · HIGH · CRITICAL**); each asset has a **0–100 risk
+score** (a documented heuristic: base exposure plus points per active
+finding); every rule carries verified **MITRE ATT&CK / ICS** techniques and a
+**response playbook**. `iotmon alert <id>` (and the dashboard's *investigate*
+panel) builds the full card — both endpoints resolved to name/role/zone/risk,
+protocol, reason, recommended actions and ATT&CK:
+
+![The analyst investigation view](screenshots/analyst-alert-view.png)
+
+`iotmon pcap <id>` carves the related packets out of the source capture for
+Wireshark, and `iotmon summary` produces a SOC security report (text,
+Markdown, JSON or a standalone HTML page). Details:
+**[Week 8: SOC analyst view](docs/08-soc-analyst-view.md)**.
+
 ## 5. Demonstration
 
 ### Quick start (no Docker, no admin rights)
@@ -287,7 +305,7 @@ no attacker image and nothing leaves the lab. Lab guide: [docs/lab-setup.md](doc
 | Live Docker lab (IoT) | **8/8** scenarios pass, re-run after each week's changes (Weeks 3-6) |
 | Live Docker lab (OT) | **6/6** Modbus/OT scenarios pass in the industrial lab ([`lab/ot/`](lab/ot)) |
 | Throughput | ≈ 4,200 packets/s parsing and ≈ 6,500 packets/s detection on a laptop (Python 3.14, scapy 2.8): ample for an IoT segment, not for a data-centre link |
-| Tests | **120 pytest tests** (parsing, every rule positive and negative, scenarios, end to end, storage, posture, dashboard API, rule-file consistency), run in CI on Python 3.11-3.13 |
+| Tests | **132 pytest tests** (parsing, every rule positive and negative, scenarios, end to end, storage, posture, dashboard API, rule-file consistency), run in CI on Python 3.11-3.13 |
 | False positives found live, and fixed | 3 (see below): each led to a config change, a code fix with a regression test, or a documented, triageable known issue |
 
 The live lab found things the synthetic tests couldn't: the Docker gateway
@@ -382,6 +400,7 @@ iot-security-monitor/
 │   ├── detections.py            the nine detectors                      ("detector")
 │   ├── models.py, state.py      alert records, posture and device risk  ("alerts")
 │   ├── storage.py               SQLite schema, triage, retention        ("database")
+│   ├── pcaptools.py             carve an alert's related packets from its capture
 │   ├── dashboard/               Flask API + web page
 │   ├── pipeline.py              wires the stages together
 │   └── cli.py                   iotmon read / live / status / alerts / rules / ...
@@ -389,7 +408,7 @@ iot-security-monitor/
 ├── lab/                         Docker Compose labs: IoT (lab/) and industrial OT (lab/ot/)
 ├── samples/                     sample intrusion capture + one capture per test scenario
 ├── tools/                       capture generators, scenario runners, demo recorder
-├── tests/                       120 pytest tests
+├── tests/                       132 pytest tests
 ├── screenshots/                 architecture diagram, dashboard screenshots, demo GIF
 └── docs/                        weekly write-ups, architecture, rules, design decisions, lessons learned
 ```
@@ -407,6 +426,9 @@ what they do (`detections`, `storage`), and the brief's names
 | `iotmon read FILE.pcap` | Analyse a capture. `-q` alerts only, `--speed X` replay in real time, `--csv` write every packet, `--utc` |
 | `iotmon live -i IFACE` | Capture live (root / `CAP_NET_RAW`; Npcap on Windows). `-f 'bpf filter'`, `-t SECONDS` |
 | `iotmon status` | Security posture, headline numbers, devices needing attention, recent alerts (`-w 5` to refresh, `--json`) |
+| `iotmon alert ID` | The analyst investigation card for one alert (endpoints, protocol, reason, response, ATT&CK) |
+| `iotmon pcap ID` | Carve the packets related to an alert into a .pcap for Wireshark |
+| `iotmon summary` | A SOC security report (`--format text\|md\|html\|json`, `-o FILE`) |
 | `iotmon alerts` | Query alerts: `--severity`, `--status` (or `active`), `--rule`, `--ip`, `--since 6h`, `--json` |
 | `iotmon alerts ack` / `resolve` / `fp` / `reopen ID...` | Triage alerts, `--note` for the analyst's reason |
 | `iotmon alerts export` | Filtered alerts with status, note and evidence as CSV or JSON |
@@ -449,6 +471,7 @@ the alerts the engine produces. CI runs them on every push.
 | 5 | [Logging and security dashboard](docs/05-logging-dashboard.md) |
 | 6 | [Turning it into a presentable project](docs/06-project-presentation.md) |
 | 7 | [Industrial / OT security expansion (Modbus, zones, PLC)](docs/07-ot-ics-expansion.md) |
+| 8 | [From monitor to SOC analyst tool (severity, risk, ATT&CK, investigation, reports)](docs/08-soc-analyst-view.md) |
 | | [Architecture](docs/architecture.md) · [Detection rules](docs/detection-rules.md) · [Design decisions](docs/design-decisions.md) · [Lessons learned](docs/lessons-learned.md) · [Lab setup](docs/lab-setup.md) · [Roadmap](docs/roadmap.md) |
 
 ## Scope

@@ -60,7 +60,18 @@
   .sev { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
   .sev::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
   .sev.critical { --c: var(--critical); } .sev.high { --c: var(--serious); }
-  .sev.medium { --c: var(--warning); } .sev.low { --c: var(--good); }
+  .sev.medium { --c: var(--warning); } .sev.low { --c: var(--good); } .sev.info { --c: var(--muted); }
+  /* analyst investigation card (Week 8) */
+  .inv > summary { color: var(--s1); font-weight: 600; }
+  .card-body { margin-top: 10px; display: grid; gap: 10px; max-width: 640px; }
+  .ep { display: grid; grid-template-columns: 70px 1fr; gap: 4px 10px; }
+  .ep .k { color: var(--muted); } .ep b { font-variant-numeric: tabular-nums; }
+  .score2 { display: inline-block; padding: 1px 7px; border-radius: 5px; color: #fff; font-weight: 600; }
+  .score2.CRITICAL { background: var(--critical); } .score2.HIGH { background: var(--serious); }
+  .score2.MEDIUM { background: var(--warning); } .score2.LOW { background: var(--s1); } .score2.INFO { background: var(--muted); }
+  .play { margin: 4px 0 0 18px; } .play li { margin: 2px 0; }
+  .atk { display: flex; flex-wrap: wrap; gap: 4px; } .atk span { font-size: 12px; border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; color: var(--ink-2); }
+  .pcap { font-size: 12px; color: var(--ink-2); } .pcap code { background: var(--page); padding: 1px 5px; border-radius: 4px; }
   .bars { display: grid; gap: 10px; }
   .bar-row { display: grid; grid-template-columns: 110px 1fr 88px; gap: 8px; align-items: center; }
   .track { height: 14px; }
@@ -164,7 +175,7 @@
   <section class="card full">
     <h2>Alerts</h2>
     <div class="filters">
-      <label>Severity <select id="f-severity"><option value="">all</option><option>critical</option><option>high</option><option>medium</option><option>low</option></select></label>
+      <label>Severity <select id="f-severity"><option value="">all</option><option>critical</option><option>high</option><option>medium</option><option>low</option><option>info</option></select></label>
       <label>Status <select id="f-status"><option value="">all</option><option value="active">active (open + ack)</option><option>open</option><option>acknowledged</option><option>resolved</option><option value="false_positive">false positive</option></select></label>
       <label>Rule <select id="f-rule"><option value="">all</option></select></label>
       <label>IP <input type="text" id="f-ip" placeholder="192.168.1.66" spellcheck="false"></label>
@@ -306,7 +317,7 @@ function drawState(s) {
 
   // severity bars: full bar = total, number shows active / total
   const max = Math.max(1, ...s.by_severity.map(x => x.count));
-  const colour = {critical: "--critical", high: "--serious", medium: "--warning", low: "--good"};
+  const colour = {critical: "--critical", high: "--serious", medium: "--warning", low: "--good", info: "--muted"};
   document.getElementById("sev-bars").innerHTML = s.by_severity.map(x => `
     <div class="bar-row" title="${x.open} active of ${x.count} ${x.severity} alerts">
       ${sevBadge(x.severity)}
@@ -377,14 +388,21 @@ function drawAlerts(rows) {
       <td><span class="st ${esc(a.status)}">${esc(STATUS_LABEL[a.status] || a.status)}</span>
           ${a.updated ? `<div class="muted mono">${fmtTime(a.updated, true)}</div>` : ""}</td>
       <td>${triageButtons(a)}</td>
-      <td><details data-id="${a.id}" ${openDetails.has(a.id) ? "open" : ""}><summary>view</summary>
-        <pre class="mono">${esc(JSON.stringify(a.details, null, 2))}</pre>
+      <td><details class="inv" data-id="${a.id}" ${openDetails.has(a.id) ? "open" : ""}><summary>investigate</summary>
+        <div class="card-body" data-card="${a.id}">loading…</div>
+        <details style="margin-top:8px"><summary class="muted">raw evidence</summary><pre class="mono">${esc(JSON.stringify(a.details, null, 2))}</pre></details>
         ${READ_ONLY ? "" : `<div class="notebox"><input type="text" placeholder="analyst note" value="${esc(a.note || "")}" data-note="${a.id}" maxlength="500">
           <button data-id="${a.id}" data-status="${esc(a.status)}" data-save="1">Save note</button></div>`}
         <div class="err" data-err="${a.id}"></div>
       </details></td>
     </tr>`).join("") : `<tr><td colspan="8" class="empty">${alertQuery().toString() ? "No alerts match the filters." : "No alerts. The network looks like its baseline."}</td></tr>`;
   document.getElementById("export").href = "api/alerts.csv?" + alertQuery();
+  openDetails.forEach(id => loadCard(id));  // keep expanded investigation cards populated across refreshes
+  const m = location.hash.match(/^#alert=(\d+)$/);  // deep-link straight to an alert's card
+  if (m && !openDetails.has(Number(m[1]))) {
+    const d = document.querySelector(`details.inv[data-id="${m[1]}"]`);
+    if (d) { d.open = true; openDetails.add(Number(m[1])); loadCard(Number(m[1])); d.scrollIntoView({block: "center"}); }
+  }
 }
 
 async function triage(id, status, note) {
@@ -415,9 +433,38 @@ document.querySelector("#alerts tbody").addEventListener("keydown", e => {
   }
 });
 document.querySelector("#alerts tbody").addEventListener("toggle", e => {
+  if (!e.target.classList.contains("inv")) return;
   const id = Number(e.target.dataset.id);
-  e.target.open ? openDetails.add(id) : openDetails.delete(id);
+  if (e.target.open) { openDetails.add(id); loadCard(id); } else openDetails.delete(id);
 }, true);
+
+function endpointCard(label, c) {
+  if (!c) return `<div class="ep"><span class="k">${label}</span><span class="muted">not a tracked device</span></div>`;
+  const bits = [c.device_type, c.role, c.zone && `${esc(c.zone)} zone`].filter(Boolean).map(esc).join(" · ");
+  return `<div class="ep">
+    <span class="k">${label}</span><span><b>${esc(c.ip)}</b>${c.name ? " " + esc(c.name) : ""}</span>
+    <span class="k"></span><span class="muted">${bits || "—"}</span>
+    <span class="k">risk</span><span><span class="score2 ${esc(c.risk.status)}">${c.risk.score}/100 ${esc(c.risk.status)}</span></span>
+  </div>`;
+}
+
+async function loadCard(id) {
+  const box = document.querySelector(`[data-card="${id}"]`);
+  if (!box || box.dataset.loaded) return;
+  try {
+    const d = await fetch(`api/alert/${id}`).then(r => r.json());
+    box.dataset.loaded = "1";
+    box.innerHTML = `
+      <div><b>${esc(d.alert_ref)}</b> · ${sevBadge(d.severity)} · <span class="mono">${esc(d.rule_id)} ${esc(d.rule)}</span></div>
+      ${endpointCard("Source", d.source)}
+      ${endpointCard("Dest", d.destination)}
+      ${d.protocol ? `<div class="ep"><span class="k">Protocol</span><span>${esc(d.protocol)}</span></div>` : ""}
+      <div><span class="k muted">Reason</span><div>${esc(d.title)}</div></div>
+      ${d.response.length ? `<div><span class="k muted">Recommended action</span><ol class="play">${d.response.map(s => `<li>${esc(s)}</li>`).join("")}</ol></div>` : ""}
+      ${d.attack.length ? `<div><span class="k muted">MITRE ATT&CK</span><div class="atk">${d.attack.map(t => `<span>${esc(t)}</span>`).join("")}</div></div>` : ""}
+      ${d.pcap.available ? `<div class="pcap">Related capture: <code>${esc(d.pcap.capture)}</code> — carve with <code>iotmon pcap ${d.id} -o alert.pcap</code></div>` : ""}`;
+  } catch (e) { box.textContent = "could not load alert detail"; console.error(e); }
+}
 for (const id of ["f-severity", "f-status", "f-rule"]) document.getElementById(id).addEventListener("change", refresh);
 document.getElementById("f-ip").addEventListener("input", () => { clearTimeout(window._ipT); window._ipT = setTimeout(refresh, 300); });
 document.querySelector("#risky").addEventListener("click", e => {

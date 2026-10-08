@@ -30,6 +30,10 @@ rules:
       a device first seen after the learning period.
     severities: [medium]
     attack: ["T1200 Hardware Additions", "T0848 Rogue Master (ICS)"]
+    response:            # recommended analyst actions (Week 8)
+      - Identify the device by MAC/vendor and locate it physically
+      - Confirm whether it is an authorised addition
+      - Approve it in the asset register, or remove it from the network
     enabled: true
     settings:
       learning_period_s: 60   # without an asset register: devices seen in the first minute form the baseline
@@ -45,6 +49,10 @@ rules:
     severities: [medium, high]
     attack: ["T1046 Network Service Discovery", "T1018 Remote System Discovery",
              "T0846 Remote System Discovery (ICS)"]
+    response:            # recommended analyst actions (Week 8)
+      - Identify the scanning host and isolate it if unapproved
+      - Review which hosts and ports it probed
+      - Check the targets for signs of follow-up compromise
     enabled: true
     settings:
       window_s: 60
@@ -61,6 +69,10 @@ rules:
       peak_factor x its busiest baseline window).
     severities: [medium]
     attack: ["T1499 Endpoint Denial of Service", "T0814 Denial of Service (ICS)"]
+    response:            # recommended analyst actions (Week 8)
+      - Identify the source device and its normal connection rate
+      - Determine whether the burst is a fault, a scan or a flood
+      - Rate-limit or isolate the source if malicious
     enabled: true
     settings:
       window_s: 60
@@ -78,6 +90,10 @@ rules:
       plaintext MQTT to the internet.
     severities: [medium, high, critical]
     attack: ["T1021 Remote Services", "T0886 Remote Services (ICS)", "T1071 Application Layer Protocol"]
+    response:            # recommended analyst actions (Week 8)
+      - Identify the service and whether it should be exposed
+      - For Telnet/IRC/ADB, treat the device as potentially compromised
+      - Disable the service or isolate the device
     enabled: true
     settings:
       cooldown_s: 600
@@ -103,6 +119,10 @@ rules:
       the device fans out to many new hosts.
     severities: [medium, high]
     attack: ["T1071 Application Layer Protocol", "T0869 Standard Application Layer Protocol (ICS)"]
+    response:            # recommended analyst actions (Week 8)
+      - Resolve the destination and check its reputation
+      - Confirm whether the device is expected to reach the internet
+      - Block the destination and investigate the device if unexpected
     enabled: true
     settings:
       dns_window_s: 600         # an address the device resolved this recently counts as looked up
@@ -120,6 +140,10 @@ rules:
       its own recent history.
     severities: [high]
     attack: ["T1498 Network Denial of Service", "T0814 Denial of Service (ICS)"]
+    response:            # recommended analyst actions (Week 8)
+      - Identify the device and the direction of the spike
+      - Distinguish a legitimate transfer from exfiltration or a flood
+      - Capture related traffic and isolate the device if malicious
     enabled: true
     settings:
       bucket_s: 10
@@ -139,6 +163,10 @@ rules:
       logins, in one window.
     severities: [medium, high]
     attack: ["T1110 Brute Force", "T0812 Default Credentials (ICS)"]
+    response:            # recommended analyst actions (Week 8)
+      - Identify the source and the service being targeted
+      - Confirm brute force versus a misconfigured client
+      - Lock the account/service and block the source if hostile
     enabled: true
     settings:
       window_s: 60
@@ -154,6 +182,10 @@ rules:
       or a known MAC on a new IP.
     severities: [low, high]
     attack: ["T1557.002 ARP Cache Poisoning", "T0830 Adversary-in-the-Middle (ICS)", "T1036 Masquerading"]
+    response:            # recommended analyst actions (Week 8)
+      - Compare the MAC/IP binding with the asset register
+      - Rule out DHCP churn versus ARP spoofing
+      - Quarantine the spoofing host and clear ARP caches
     enabled: true
     settings:
       ip_change_severity: low   # known MAC on a new IP (DHCP churn is the usual cause)
@@ -168,11 +200,15 @@ rules:
       max(min_messages, peak_factor x learned peak), a topic the client never
       used, another device's topic (spoofed telemetry), or a subscription to
       every topic.
-    severities: [low, medium, high]
+    severities: [info, low, medium, high]
     attack: ["T0886 Remote Services (ICS)", "T0883 Internet Accessible Device (ICS)",
              "T0806 Brute Force I/O (ICS)", "T0814 Denial of Service (ICS)",
              "T0856 Spoof Reporting Message (ICS)", "T0855 Unauthorized Command Message (ICS)",
              "T0801 Monitor Process State (ICS)", "T0861 Point & Tag Identification (ICS)"]
+    response:            # recommended analyst actions (Week 8)
+      - Identify the MQTT client, its host and the broker
+      - Check the topic ownership and message rate against the baseline
+      - Revoke the client's credentials and enforce topic ACLs if abused
     enabled: true
     settings:
       window_s: 60
@@ -192,6 +228,10 @@ rules:
       (a PLC). High when the asset is not declared in the OT policy.
     severities: [medium, high]
     attack: ["T1200 Hardware Additions", "T0848 Rogue Master (ICS)"]
+    response:            # recommended analyst actions (Week 8)
+      - Identify the new OT asset and its role
+      - Verify it against the control-network asset documentation
+      - Declare it in the policy, or remove it from the OT zone
     enabled: true
     settings:
       cooldown_s: 3600
@@ -206,6 +246,10 @@ rules:
     severities: [high, critical]
     attack: ["T1021 Remote Services", "T0855 Unauthorized Command Message (ICS)",
              "T0836 Modify Parameter (ICS)"]
+    response:            # recommended analyst actions (Week 8)
+      - Identify the source and whether it is an authorised engineering station
+      - For a write, assess the impact on the physical process immediately
+      - Block the client at the switch and verify the PLC's register values
     enabled: true
     settings:
       cooldown_s: 600
@@ -219,6 +263,10 @@ rules:
       internal ones high.
     severities: [high, critical]
     attack: ["T1021 Remote Services", "T0886 Remote Services (ICS)"]
+    response:            # recommended analyst actions (Week 8)
+      - Identify the source host and its zone
+      - Confirm whether the IT->OT path is sanctioned
+      - Enforce segmentation (firewall/VLAN) and investigate the source
     enabled: true
     settings:
       cooldown_s: 600
@@ -232,6 +280,10 @@ rules:
       are high, anything else medium.
     severities: [medium, high]
     attack: ["T0869 Standard Application Layer Protocol (ICS)"]
+    response:            # recommended analyst actions (Week 8)
+      - Identify the unexpected protocol and the OT device involved
+      - Determine whether it is management traffic or an intrusion
+      - Disable the service on the OT device and restrict the path
     enabled: true
     settings:
       cooldown_s: 600
@@ -245,6 +297,10 @@ rules:
       >= max(min_requests, peak_factor x learned peak).
     severities: [medium]
     attack: ["T0801 Monitor Process State (ICS)", "T0814 Denial of Service (ICS)"]
+    response:            # recommended analyst actions (Week 8)
+      - Identify the Modbus client and its baseline request rate
+      - Distinguish a polling misconfiguration from a flood or register scan
+      - Rate-limit the client and verify PLC availability
     enabled: true
     settings:
       window_s: 60
@@ -260,6 +316,10 @@ rules:
       the internet is critical; any other OT device is high.
     severities: [high, critical]
     attack: ["T1071 Application Layer Protocol", "T0883 Internet Accessible Device (ICS)"]
+    response:            # recommended analyst actions (Week 8)
+      - Treat an OT device reaching the internet as a serious incident
+      - Capture the traffic and identify the external destination
+      - Isolate the OT device and begin incident response
     enabled: true
     settings:
       cooldown_s: 600

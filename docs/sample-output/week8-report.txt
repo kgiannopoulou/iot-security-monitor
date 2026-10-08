@@ -1,0 +1,40 @@
+# iotmon summary  (SOC security report, OT sample capture)
+
+IoT/OT SECURITY REPORT
+============================================================
+
+Monitoring period
+  2026-10-07 10:30 - 10:38 UTC
+
+Assets discovered:               7
+  IoT devices:                   0
+  OT devices:                    5
+  Unknown devices:               2
+
+Traffic analyzed:            1,112  (82.2 kB)
+
+Alerts
+------------------------------------------------------------
+  Critical:                      2
+  High:                          6
+  Medium:                        4
+  Low:                           0
+  Info:                          0
+
+Most Active Asset
+  192.168.10.20  1,064 packets
+
+Highest Risk Asset
+  192.168.10.20  PLC
+  Risk Score: 100/100  CRITICAL
+    Base exposure (zone, role, services) +100
+    Unauthorized PLC write             +40
+    OT device reaching internet        +40
+    Unauthorized PLC access            +30
+    Cross-zone (IT->OT) access         +25
+    Suspicious service                 +25
+    Unexpected protocol in OT          +20
+    Abnormal Modbus rate               +15
+
+Top Detection
+  DET-011 unauthorized_modbus  (3 alerts)
