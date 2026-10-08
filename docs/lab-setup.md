@@ -13,7 +13,7 @@ Everything runs on one machine in an isolated Docker bridge network,
 | `cloud` | 172.28.0.30 | random | "Vendor cloud" HTTP API |
 | `admin` | 172.28.0.5 | random | Workstation opening the camera UI every 60 s |
 | `monitor` | host network | | `iotmon live -i iotlab0`, writes `data/lab/iotmon.db` |
-| `dashboard` | 127.0.0.1:8080 | | Reads the same database |
+| `dashboard` | 127.0.0.1:8080 | | Reads the same database; alert triage is its only write |
 
 ## Run
 
@@ -29,6 +29,8 @@ in Git Bash on Windows):
 
 ```bash
 docker compose exec dashboard python -m iotmon report --db /data/iotmon.db
+docker compose exec dashboard python -m iotmon status --db /data/iotmon.db      # posture (Week 5)
+docker compose exec dashboard python -m iotmon alerts ack 4 --note "..." --db /data/iotmon.db
 ```
 
 Watch the raw packet table for 30 seconds:

@@ -1,0 +1,40 @@
+IOT SECURITY MONITOR                                                               posture: CRITICAL
+────────────────────────────────────────────────────────────────────────────────────────────────────
+Devices monitored                      7
+Packets analyzed                   3,546   1.1 MB
+Security alerts                       12   12 active
+High-severity alerts                   6   6 active
+Traffic window                             2026-10-07 10:30 - 10:38 UTC
+Last run                              #1   read samples/iot-lab.pcap (finished, 3,546 packets)
+
+Why CRITICAL
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  - 1 active critical alert: DET-004 suspicious_port
+  - 5 active high alerts: DET-002 port_scan, DET-004 suspicious_port, DET-005 external_connection,
+    DET-006 traffic_spike, DET-007 failed_connections
+  - 6 active medium alerts: DET-001 new_device, DET-002 port_scan, DET-003 connection_rate, DET-005
+    external_connection, DET-007 failed_connections, DET-009 mqtt_activity
+  - Most affected device: 192.168.1.22 (Hikvision), 7 active alerts
+
+Devices needing attention
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  IP              VENDOR                     ALERTS  WORST     RULES
+  192.168.1.22    Hikvision                       7  CRITICAL  DET-002, DET-003, DET-004, DET-005...
+  192.168.1.66    Raspberry Pi Foundation         7  HIGH      DET-001, DET-002, DET-004, DET-007...
+  192.168.1.10    Raspberry Pi Trading            2  HIGH      DET-007, DET-009
+  192.168.1.21    Espressif (ESP32/ESP8266)       1  MEDIUM    DET-007
+
+Recent Alerts
+────────────────────────────────────────────────────────────────────────────────────────────────────
+    12 10:36:50  HIGH     DET-006  Traffic spike: 192.168.1.22 sent 591,031 bytes in 10s (baselin...
+    11 10:36:40  MEDIUM   DET-003  Abnormal connection rate: 192.168.1.22 opened 20 connections i...
+    10 10:36:40  HIGH     DET-005  Unexpected external connection: 192.168.1.22 -> 198.51.100.77:53
+     9 10:36:35  CRITICAL DET-004  IRC session 192.168.1.22 -> 198.51.100.23:6667
+     8 10:36:35  MEDIUM   DET-005  Unexpected external connection: 192.168.1.22 -> 198.51.100.23:...
+     7 10:36:06  HIGH     DET-007  MQTT authentication failures: 192.168.1.66 refused 5x by broke...
+     6 10:36:00  MEDIUM   DET-009  New MQTT client: 192.168.1.66 connected to broker 192.168.1.10...
+     5 10:35:52  MEDIUM   DET-007  Repeated failed connections: 192.168.1.66 -> 192.168.1.21:23 (...
+     4 10:35:30  HIGH     DET-004  TELNET session 192.168.1.66 -> 192.168.1.22:23
+     3 10:35:10  HIGH     DET-002  Port scan: 192.168.1.66 probed 15 ports on 192.168.1.22
+     2 10:35:00  MEDIUM   DET-002  ARP sweep from 192.168.1.66
+     1 10:35:00  MEDIUM   DET-001  New IoT device detected: 192.168.1.66 (Raspberry Pi Foundation)

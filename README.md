@@ -4,8 +4,10 @@ A passive network monitor for IoT / OT networks, written in Python. It captures
 traffic (live or from a pcap), decodes it down to the MQTT topic and DNS
 query, builds a persistent device inventory, learns how each device normally
 behaves, monitors the IoT protocol itself (MQTT clients, topics and message
-rates), runs nine detection rules (DET-001 to DET-009), stores the results in
-SQLite / JSONL / CSV, and shows them on a web dashboard.
+rates), runs nine detection rules (DET-001 to DET-009), logs everything to
+SQLite / JSONL / CSV, and turns it into a security posture (CRITICAL / AT
+RISK / WATCH / OK, with reasons) on a web and terminal dashboard where
+alerts are triaged.
 
 It comes with a Docker lab of simulated IoT devices to monitor, a
 deterministic sample capture of a Mirai-style intrusion, and one controlled
@@ -15,18 +17,19 @@ test scenario per rule, replayed in the tests and run live against the lab.
 
 ```
 IoT / OT devices ──▶ Python monitor ──▶ Detection engine ──▶ Logging / alerts ──▶ Dashboard
- (Docker lab or       capture, parse,     DET-001..008 vs a     SQLite, JSONL,       devices, alerts,
-  pcap file)          flows, inventory    learned per-device    CSV                  traffic, severity
-                                          baseline
+ (Docker lab or       capture, parse,     DET-001..009 vs a     SQLite (alerts,      posture, devices,
+  pcap file)          flows, inventory,   learned per-device    triage, runs),       alerts + triage,
+                      MQTT tracker        baseline              JSONL, CSV           traffic, severity
 ```
 
 ## What it demonstrates
 
 | Skill | Where |
 |---|---|
-| **Python development** | Clean package with a CLI, typed dataclasses, 88 pytest tests, a Flask API ([`iotmon/`](iotmon)) |
+| **Python development** | Clean package with a CLI, typed dataclasses, 99 pytest tests, a Flask API ([`iotmon/`](iotmon)) |
 | **Networking** | Layer-by-layer parsing (Ethernet → ARP/IP → TCP/UDP → MQTT/DNS/HTTP), flows vs packets, SPAN-style capture. Explained in **[Week 1: what the monitor sees and why](docs/01-networking-foundation.md)** |
 | **Detection engineering** | Eight stateful rules with IDs, sliding windows and thresholds learned from each device's own behaviour, evidence-record alerts, ATT&CK mapping, documented false positives and blind spots, controlled test scenarios including a near miss that must stay silent (**[Week 3: detection engine](docs/03-detection-engine.md)**, [rules](docs/detection-rules.md)) |
+| **Security operations** | SQLite as the system of record (versioned schema, run log, retention), alert triage with analyst notes, a posture verdict with its reasons, devices ranked by risk, CSV export (**[Week 5: logging and dashboard](docs/05-logging-dashboard.md)**) |
 | **IoT / OT security** | MQTT protocol monitoring: who connects to the broker, who publishes which topic, message rates, topic spoofing (**[Week 4](docs/04-iot-protocols.md)**). Passive asset inventory with an approve workflow ([Week 2](docs/02-device-inventory.md)), rogue-device and ARP-spoofing detection, MQTT authentication monitoring, exposed Telnet, botnet C2 and flood behaviour, OUI vendor fingerprinting |
 
 ## Quick start (no Docker, no admin rights)
@@ -34,6 +37,7 @@ IoT / OT devices ──▶ Python monitor ──▶ Detection engine ──▶ L
 ```bash
 pip install -r requirements.txt
 python -m iotmon read samples/iot-lab.pcap        # packet table + alerts
+python -m iotmon status                           # security posture at a glance
 python -m iotmon report                           # devices, top flows, alerts
 python -m iotmon dashboard                        # http://127.0.0.1:8080
 ```
@@ -163,6 +167,52 @@ client never used, a topic that belongs to *another* device (spoofed
 telemetry, high), or a subscription to every topic (`#`). Details:
 **[Week 4: IoT protocols](docs/04-iot-protocols.md)**.
 
+## Logging and security dashboard (Week 5)
+
+The database is the monitor's log. It holds every alert with its evidence,
+a triage status (open, acknowledged, resolved, false positive) and an
+analyst note, plus every device, flow and minute of traffic, and one row
+per monitoring run. From it the monitor computes a **security posture**:
+one verdict with the reasons behind it, identical in the terminal and on
+the web page.
+
+```
+$ iotmon status            # live Docker lab, after the scenarios and triage
+IOT SECURITY MONITOR                                                                posture: AT RISK
+────────────────────────────────────────────────────────────────────────────────────────────────────
+Devices monitored                     10   2 not approved
+Packets analyzed                   1,786   417.5 kB
+Security alerts                       12   6 active
+High-severity alerts                   5   3 active
+Last run                              #1   live iotlab0 (running, 1,786 packets)
+
+Why AT RISK
+  - 3 active high alerts: DET-004 suspicious_port, DET-005 external_connection, DET-009 mqtt_activity
+  - 3 active medium alerts: DET-003 connection_rate, DET-004 suspicious_port, DET-009 mqtt_activity
+  - 2 devices not approved in the asset register: 172.28.0.66, 172.28.0.1
+  - Most affected device: 172.28.0.20 (Espressif (ESP32/ESP8266)), 6 active alerts
+  - 6 alerts already triaged as resolved or false positive
+
+Recent Alerts
+    12 08:35:00  HIGH     DET-009  MQTT topic spoofing: 172.28.0.20 published to ...  [acknowledged]
+    ...
+```
+
+```bash
+python -m iotmon alerts --status active --ip 172.28.0.20          # query the log
+python -m iotmon alerts ack 4 5 --note "isolating the sensor"     # triage (or resolve / fp / reopen)
+python -m iotmon alerts export --severity high -o high.csv        # for a report or a SIEM
+python -m iotmon db info                                          # schema, row counts, runs
+```
+
+The dashboard opens with the posture banner and the four headline numbers.
+It ranks devices by their active alerts and lets you filter, triage and
+export alerts in the browser. Its only write endpoint is protected against
+cross-site requests, and `--read-only` turns it off. Details:
+**[Week 5: logging and dashboard](docs/05-logging-dashboard.md)**.
+
+![Dashboard on the live lab after triage](docs/images/dashboard-week5-live.png)
+
 ## Live lab (Docker)
 
 ```bash
@@ -174,8 +224,6 @@ docker compose up -d --build          # broker, 4 IoT devices, cloud, DNS, admin
 The monitor sniffs the lab's bridge (`iotlab0`) from the host network
 namespace, the container equivalent of a switch SPAN port. Details and a
 live detection check are in the [lab guide](docs/lab-setup.md).
-
-![Dashboard on the live Docker lab](docs/images/dashboard-live-lab.png)
 
 ## CLI
 
@@ -189,13 +237,18 @@ live detection check are in the [lab guide](docs/lab-setup.md).
 | `iotmon baseline learn FILE.pcap` | Learn each device's normal behaviour from trusted traffic (`-d SECONDS`, `--force` to replace) |
 | `iotmon mqtt` | MQTT clients (ID, host, broker, messages, topics, subscriptions) and topics (messages, last value, publishers) from the database |
 | `iotmon baseline show` | Ports each device uses and serves, its internet peers and peak connection rate (`--json`) |
-| `iotmon dashboard` | Web dashboard on `127.0.0.1:8080` |
+| `iotmon status` | Security posture, headline numbers, devices needing attention, recent alerts (`-w 5` to refresh, `--json`) |
+| `iotmon alerts` | Query alerts: `--severity`, `--status` (or `active`), `--rule`, `--ip`, `--since 6h`, `--json` |
+| `iotmon alerts ack` / `resolve` / `fp` / `reopen ID...` | Triage alerts, `--note` for the analyst's reason |
+| `iotmon alerts export` | Filtered alerts with status, note and evidence as CSV or JSON (`-o FILE`) |
+| `iotmon db info` / `db prune --keep-days N` | Schema version, rows per table, monitoring runs / retention |
+| `iotmon dashboard` | Web dashboard on `127.0.0.1:8080` (`--read-only` disables triage) |
 
 Common options: `--config my.toml` (override any threshold in
 [`default.toml`](iotmon/default.toml)), `--db PATH`, `--append`, `--no-store`, `--inventory [JSON]` (use and update the asset register), `--baseline [JSON]` (compare with a saved behavioural baseline, or learn and save one).
 
-Outputs (default `data/`): `iotmon.db` (SQLite: alerts, devices, flows,
-per-minute traffic), `alerts.jsonl` (SIEM-ready), `packets.csv` (with `--csv`),
+Outputs (default `data/`): `iotmon.db` (SQLite: alerts with triage status,
+devices, flows, per-minute traffic, MQTT clients/topics, monitoring runs), `alerts.jsonl` (SIEM-ready), `packets.csv` (with `--csv`),
 `inventory.json` (asset register, with `--inventory`), `baseline.json` (behavioural baseline, with `--baseline`).
 
 ## Detection rules
@@ -217,7 +270,7 @@ Logic, threshold reasoning, false positives, and known gaps: [docs/detection-rul
 ## Project layout
 
 ```
-iotmon/               the monitor (capture, parser, flows, inventory, assets, baseline, mqtt, detections, storage, dashboard, cli)
+iotmon/               the monitor (capture, parser, flows, inventory, assets, baseline, mqtt, detections, storage, state, dashboard, cli)
 lab/                  Docker lab: Mosquitto broker, dnsmasq, simulated devices, monitor + dashboard;
                       scenarios/attacks.py holds the controlled attack actions for the live tests
 samples/iot-lab.pcap  8-minute synthetic capture: 5 min baseline, then the intrusion
@@ -225,7 +278,7 @@ samples/scenarios/    one 4-minute capture per test scenario (DET-001..005, thre
 tools/                generate_sample_pcap.py, generate_scenarios.py (deterministic: same bytes every run),
                       run_scenarios.py (replay and check), lab_scenarios.py (run live in the Docker lab)
 tests/                parser, per-rule, scenario, end-to-end and dashboard tests
-docs/                 Week 1-4 write-ups, architecture, rules, lab guide, roadmap
+docs/                 Week 1-5 write-ups, architecture, rules, lab guide, roadmap
 ```
 
 ## Tests
@@ -240,7 +293,9 @@ for each rule, each controlled scenario triggering exactly its rules (and the
 near miss triggering none), the full intrusion timeline producing exactly the
 expected 12 alerts, **zero alerts during the 5-minute baseline**, the MQTT tracker and
 every DET-009 check, storage outputs, the
-dashboard API, and the Week 2 inventory: record fields, the asset register
+dashboard API, the Week 5 log (runs, triage, upgrading an older database,
+retention), every posture level, the `status` / `alerts` / `db` commands,
+the dashboard's triage and cross-site checks, and the Week 2 inventory: record fields, the asset register
 (round trip, bootstrap, replay-safe counters), IP-conflict and IP-change
 events, and the full learn → detect → approve workflow.
 
@@ -250,10 +305,11 @@ events, and the full learn → detect → approve workflow.
 2. [Week 2: Device discovery and asset inventory](docs/02-device-inventory.md)
 3. [Week 3: Detection engine and test scenarios](docs/03-detection-engine.md)
 4. [Week 4: IoT protocols (MQTT)](docs/04-iot-protocols.md)
-5. [Architecture](docs/architecture.md)
-6. [Detection rules](docs/detection-rules.md)
-7. [Lab setup](docs/lab-setup.md)
-8. [Roadmap](docs/roadmap.md)
+5. [Week 5: Logging and security dashboard](docs/05-logging-dashboard.md)
+6. [Architecture](docs/architecture.md)
+7. [Detection rules](docs/detection-rules.md)
+8. [Lab setup](docs/lab-setup.md)
+9. [Roadmap](docs/roadmap.md)
 
 ## Scope
 

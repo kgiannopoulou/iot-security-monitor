@@ -1,0 +1,103 @@
+# Docker lab, 2026-10-08, after the 8/8 live scenarios (python tools/lab_scenarios.py).
+# Commands ran as: docker compose exec dashboard python -m iotmon ... --db /data/iotmon.db
+# Alert 1 was triaged earlier through the dashboard API, before the scenarios ran:
+$ curl -X POST localhost:8080/api/alerts/1 -H 'Content-Type: application/json' -d '{"status": "false_positive", "note": "Known lab-start FP: camera upload + admin snapshot share a 10 s bucket (roadmap)"}'
+{"id":1,"note":"Known lab-start FP: camera upload + admin snapshot share a 10 s bucket (roadmap)","status":"false_positive","updated":1791448392.4452753}
+
+$ iotmon alerts resolve 2 3 --note "Rogue Pi 172.28.0.66 removed from the network"
+alert 2: resolved (Rogue Pi 172.28.0.66 removed from the network)
+alert 3: resolved (Rogue Pi 172.28.0.66 removed from the network)
+$ iotmon alerts fp 8 9 10 --note "Authorised: admin workstation running MQTT Explorer for diagnostics"
+alert 8: false_positive (Authorised: admin workstation running MQTT Explorer for diagnostics)
+alert 9: false_positive (Authorised: admin workstation running MQTT Explorer for diagnostics)
+alert 10: false_positive (Authorised: admin workstation running MQTT Explorer for diagnostics)
+$ iotmon alerts ack 4 5 6 7 11 12 --note "Temp sensor 172.28.0.20 behaves as compromised; isolating, firmware check"
+alert 4: acknowledged (Temp sensor 172.28.0.20 behaves as compromised; isolating, firmware check)
+alert 5: acknowledged (Temp sensor 172.28.0.20 behaves as compromised; isolating, firmware check)
+alert 6: acknowledged (Temp sensor 172.28.0.20 behaves as compromised; isolating, firmware check)
+alert 7: acknowledged (Temp sensor 172.28.0.20 behaves as compromised; isolating, firmware check)
+alert 11: acknowledged (Temp sensor 172.28.0.20 behaves as compromised; isolating, firmware check)
+alert 12: acknowledged (Temp sensor 172.28.0.20 behaves as compromised; isolating, firmware check)
+
+$ iotmon status
+IOT SECURITY MONITOR                                                                posture: AT RISK
+────────────────────────────────────────────────────────────────────────────────────────────────────
+Devices monitored                     10   2 not approved
+Packets analyzed                   1,786   417.5 kB
+Security alerts                       12   6 active
+High-severity alerts                   5   3 active
+Traffic window                             2026-10-08 08:31 - 08:36 UTC
+Last run                              #1   live iotlab0 (running, 1,786 packets)
+
+Why AT RISK
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  - 3 active high alerts: DET-004 suspicious_port, DET-005 external_connection, DET-009
+    mqtt_activity
+  - 3 active medium alerts: DET-003 connection_rate, DET-004 suspicious_port, DET-009 mqtt_activity
+  - 2 devices not approved in the asset register: 172.28.0.66, 172.28.0.1
+  - Most affected device: 172.28.0.20 (Espressif (ESP32/ESP8266)), 6 active alerts
+  - 6 alerts already triaged as resolved or false positive
+
+Devices needing attention
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  IP              VENDOR                     ALERTS  WORST     RULES
+  172.28.0.20     Espressif (ESP32/ESP8266)       6  HIGH      DET-003, DET-004, DET-005, DET-009
+  172.28.0.10     Raspberry Pi Trading            3  HIGH      DET-003, DET-009
+  172.28.0.22     Hikvision                       2  HIGH      DET-004
+
+Recent Alerts
+────────────────────────────────────────────────────────────────────────────────────────────────────
+    12 08:35:00  HIGH     DET-009  MQTT topic spoofing: 172.28.0.20 published to ...  [acknowledged]
+    11 08:34:39  MEDIUM   DET-009  MQTT message burst: 172.28.0.20 published 65 m...  [acknowledged]
+    10 08:34:17  MEDIUM   DET-009  Broad MQTT subscription: 172.28.0.5 subscrib...  [false_positive]
+     9 08:34:16  MEDIUM   DET-009  New MQTT client: 172.28.0.5 connected to bro...  [false_positive]
+     8 08:34:16  MEDIUM   DET-004  Unusual port: 172.28.0.5 -> 172.28.0.10:1883...  [false_positive]
+     7 08:34:05  HIGH     DET-005  Unexpected external connection: 172.28.0.20 ->...  [acknowledged]
+     6 08:33:54  HIGH     DET-004  TELNET session 172.28.0.20 -> 172.28.0.22:23  [acknowledged]
+     5 08:33:54  MEDIUM   DET-004  Unusual port: 172.28.0.20 -> 172.28.0.22:80 (H...  [acknowledged]
+     4 08:33:40  MEDIUM   DET-003  Abnormal connection rate: 172.28.0.20 opened 2...  [acknowledged]
+     3 08:33:24  HIGH     DET-002  Port scan: 172.28.0.66 probed 15 ports on 172.28.0.10  [resolved]
+     2 08:33:13  MEDIUM   DET-001  New IoT device detected: 172.28.0.66 (Raspberry Pi...  [resolved]
+     1 08:32:10  HIGH     DET-006  Traffic spike: 172.28.0.22 sent 53,502 bytes...  [false_positive]
+
+$ iotmon alerts --status active --ip 172.28.0.20
+  ID  TIME                 SEVERITY RULE     STATUS         ALERT
+   4  2026-10-08 08:33:40  MEDIUM   DET-003  acknowledged   Abnormal connection rate: 172.28.0.20 opened 20 connections in 60s (baseline peak 0)
+                                                           note: Temp sensor 172.28.0.20 behaves as compromised; isolating, firmware check
+   5  2026-10-08 08:33:54  MEDIUM   DET-004  acknowledged   Unusual port: 172.28.0.20 -> 172.28.0.22:80 (HTTP), outside the baseline
+                                                           note: Temp sensor 172.28.0.20 behaves as compromised; isolating, firmware check
+   6  2026-10-08 08:33:54  HIGH     DET-004  acknowledged   TELNET session 172.28.0.20 -> 172.28.0.22:23
+                                                           note: Temp sensor 172.28.0.20 behaves as compromised; isolating, firmware check
+   7  2026-10-08 08:34:05  HIGH     DET-005  acknowledged   Unexpected external connection: 172.28.0.20 -> 198.51.100.23:8883
+                                                           note: Temp sensor 172.28.0.20 behaves as compromised; isolating, firmware check
+  11  2026-10-08 08:34:39  MEDIUM   DET-009  acknowledged   MQTT message burst: 172.28.0.20 published 65 messages in 60s (baseline peak 13)
+                                                           note: Temp sensor 172.28.0.20 behaves as compromised; isolating, firmware check
+  12  2026-10-08 08:35:00  HIGH     DET-009  acknowledged   MQTT topic spoofing: 172.28.0.20 published to 'factory/motor/rpm', normally published only by 172.28.0.23
+                                                           note: Temp sensor 172.28.0.20 behaves as compromised; isolating, firmware check
+
+6 alerts
+
+$ iotmon alerts export --severity high
+id,timestamp,rule_id,rule,severity,status,src,dst,title,mitre,note,details
+1,2026-10-08T08:32:10+00:00,DET-006,traffic_spike,high,false_positive,172.28.0.22,,"Traffic spike: 172.28.0.22 sent 53,502 bytes in 10s (baseline 3,326)",T1498 
+3,2026-10-08T08:33:24+00:00,DET-002,port_scan,high,resolved,172.28.0.66,172.28.0.10,Port scan: 172.28.0.66 probed 15 ports on 172.28.0.10,T1046 Network Service 
+6,2026-10-08T08:33:54+00:00,DET-004,suspicious_port,high,acknowledged,172.28.0.20,172.28.0.22,TELNET session 172.28.0.20 -> 172.28.0.22:23,T1021 Remote Services
+7,2026-10-08T08:34:05+00:00,DET-005,external_connection,high,acknowledged,172.28.0.20,198.51.100.23,Unexpected external connection: 172.28.0.20 -> 198.51.100.23
+12,2026-10-08T08:35:00+00:00,DET-009,mqtt_activity,high,acknowledged,172.28.0.20,172.28.0.10,"MQTT topic spoofing: 172.28.0.20 published to 'factory/motor/rpm',
+
+$ iotmon db info
+database   /data/iotmon.db (3335 KiB)
+schema     version 5
+
+TABLE            ROWS
+alerts             12
+devices            10
+flows              85
+mqtt_clients        5
+mqtt_topics         4
+runs                1
+traffic            40
+
+ RUN  MODE  STARTED              DURATION   PACKETS ALERTS  SOURCE
+   1  live  2026-10-08 08:31:04    265 s*      1794     12  iotlab0
+(* still running, or stopped without a clean shutdown)

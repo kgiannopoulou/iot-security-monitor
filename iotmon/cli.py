@@ -9,17 +9,25 @@
     python -m iotmon baseline learn baseline.pcap     # learn normal behaviour per device
     python -m iotmon baseline show                    # what each device normally does
     python -m iotmon mqtt                             # MQTT clients and topics from the database
+    python -m iotmon status                           # security posture at a glance
+    python -m iotmon alerts --severity high           # query the alert log
+    python -m iotmon alerts ack 3 4 --note "..."      # triage alerts
+    python -m iotmon alerts export -o alerts.csv      # export for a report or a SIEM
+    python -m iotmon db info                          # schema, row counts, monitoring runs
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 import signal
 import sqlite3
 import sys
+import time
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import __version__
@@ -28,7 +36,7 @@ from .baseline import DEFAULT_BASELINE, Baseline
 from .config import load_config
 from .display import Printer
 from .pipeline import Monitor
-from .storage import Storage
+from .storage import ALERT_STATUSES, SCHEMA_VERSION, Storage, prune, set_alert_status
 
 DEFAULT_DB = "data/iotmon.db"
 
@@ -50,11 +58,12 @@ def _add_common(p: argparse.ArgumentParser) -> None:
                         f"learn it during the learning period and save it (default path {DEFAULT_BASELINE})")
 
 
-def _build_monitor(args) -> Monitor:
+def _build_monitor(args, mode: str, source: str | None) -> Monitor:
     config = load_config(args.config)
     storage = None
     if not args.no_store:
-        storage = Storage(args.db, args.out_dir, packet_csv=args.csv, reset=not args.append)
+        storage = Storage(args.db, args.out_dir, packet_csv=args.csv, reset=not args.append,
+                          mode=mode, source=source)
     printer = Printer(show_packets=not args.quiet, utc=args.utc)
     assets = AssetRegister(args.inventory) if args.inventory else None
     baseline = _baseline(args.baseline, config) if args.baseline else None
@@ -86,7 +95,7 @@ def _summary(mon: Monitor) -> None:
 def cmd_read(args) -> int:
     from .capture import read_pcap
 
-    mon = _build_monitor(args)
+    mon = _build_monitor(args, "read", Path(args.pcap).as_posix())
     mon.run(read_pcap(args.pcap, limit=args.count))
     _summary(mon)
     return 0
@@ -95,7 +104,7 @@ def cmd_read(args) -> int:
 def cmd_live(args) -> int:
     from .capture import sniff_live
 
-    mon = _build_monitor(args)
+    mon = _build_monitor(args, "live", args.interface or "default interface")
     signal.signal(signal.SIGTERM, _stop)  # docker stop: shut down cleanly, flush outputs
     print(f"capturing on {args.interface or 'default interface'}"
           f"{' filter ' + repr(args.bpf) if args.bpf else ''} - Ctrl+C to stop", file=sys.stderr)
@@ -176,6 +185,165 @@ def cmd_mqtt(args) -> int:
     if not _print_mqtt(db):
         print("no MQTT traffic in this database", file=sys.stderr)
         return 1
+    return 0
+
+
+def _need_db(path: str) -> bool:
+    if Path(path).exists():
+        return True
+    print(f"error: no database at {path} - run 'read' or 'live' first", file=sys.stderr)
+    return False
+
+
+def _can_print(text: str) -> bool:
+    try:
+        text.encode(sys.stdout.encoding or "ascii")
+        return True
+    except UnicodeEncodeError:  # e.g. a cp1252 Windows console
+        return False
+
+
+def cmd_status(args) -> int:
+    from .state import render_text, security_state
+
+    if not _need_db(args.db):
+        return 1
+    colour = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+    width = args.width or min(120, max(78, shutil.get_terminal_size((100, 24)).columns - 1))
+    try:
+        while True:
+            state = security_state(args.db, recent=args.recent)
+            if args.json:
+                print(json.dumps(state, indent=2, default=str))
+                return 0
+            text = render_text(state, utc=args.utc, colour=colour, width=width, ascii=not _can_print("─"))
+            if not args.watch:
+                print(text)
+                return 0
+            print("\033[2J\033[H" + text + f"\n\nrefreshing every {args.watch:g} s - Ctrl+C to stop", flush=True)
+            time.sleep(args.watch)
+    except KeyboardInterrupt:
+        return 0
+
+
+def _since(value: str | None) -> float | None:
+    """'15m', '2h', '7d' before now, or an ISO date/time."""
+    if not value:
+        return None
+    units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+    if value[-1] in units and value[:-1].replace(".", "", 1).isdigit():
+        return time.time() - float(value[:-1]) * units[value[-1]]
+    dt = datetime.fromisoformat(value)
+    return (dt if dt.tzinfo else dt.astimezone()).timestamp()
+
+
+def _filtered_alerts(args, limit: int) -> list[dict]:
+    from .state import connect_ro, query_alerts
+
+    con = connect_ro(args.db)
+    try:
+        return query_alerts(con, args.severity, args.status, args.rule, args.ip, _since(args.since), limit)
+    finally:
+        con.close()
+
+
+def cmd_alerts_list(args) -> int:
+    if not _need_db(args.db):
+        return 1
+    rows = _filtered_alerts(args, args.limit)
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+    tz = timezone.utc if args.utc else None
+    print(f"{'ID':>4}  {'TIME':<19}  {'SEVERITY':<8} {'RULE':<8} {'STATUS':<14} ALERT")
+    for a in reversed(rows):  # oldest first reads like a timeline
+        when = datetime.fromtimestamp(a["ts"], tz=tz).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"{a['id']:>4}  {when}  {a['severity'].upper():<8} {a['rule_id'] or '':<8} {a['status']:<14} "
+              f"{a['title']}" + (f"\n{'':<59}note: {a['note']}" if a.get("note") else ""))
+    print(f"\n{len(rows)} alert{'s' if len(rows) != 1 else ''}", file=sys.stderr)
+    return 0
+
+
+def cmd_alerts_triage(args) -> int:
+    if not _need_db(args.db):
+        return 1
+    found = set(set_alert_status(args.db, args.ids, args.new_status, args.note))
+    for i in args.ids:
+        if i in found:
+            print(f"alert {i}: {args.new_status}" + (f" ({args.note})" if args.note else ""))
+        else:
+            print(f"error: no alert {i}", file=sys.stderr)
+    return 0 if len(found) == len(set(args.ids)) else 1
+
+
+def cmd_alerts_export(args) -> int:
+    from .state import export_rows, write_csv
+
+    if not _need_db(args.db):
+        return 1
+    alerts = _filtered_alerts(args, limit=10**9)
+    out = open(args.output, "w", newline="", encoding="utf-8") if args.output else sys.stdout
+    try:
+        if args.format == "json":
+            json.dump([{**r, "details": json.loads(r["details"])} for r in export_rows(alerts)], out, indent=2)
+            out.write("\n")
+        else:
+            write_csv(alerts, out)
+    finally:
+        if args.output:
+            out.close()
+            print(f"{len(alerts)} alerts -> {args.output}", file=sys.stderr)
+    return 0
+
+
+def cmd_db_info(args) -> int:
+    if not _need_db(args.db):
+        return 1
+    db = sqlite3.connect(f"file:{Path(args.db).as_posix()}?mode=ro", uri=True)
+    db.row_factory = sqlite3.Row
+    version = db.execute("PRAGMA user_version").fetchone()[0]
+    size = sum(Path(f"{args.db}{s}").stat().st_size for s in ("", "-wal") if Path(f"{args.db}{s}").exists())
+    print(f"database   {Path(args.db).as_posix()} ({size / 1024:.0f} KiB)")
+    print(f"schema     version {version}" + ("" if version >= SCHEMA_VERSION else
+                                             f" (upgraded to {SCHEMA_VERSION} on the next write)"))
+    tables = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'"
+                                       " AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+    print(f"\n{'TABLE':<14} {'ROWS':>6}")
+    for t in tables:
+        print(f"{t:<14} {db.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0]:>6}")
+    if "runs" in tables:
+        tz = timezone.utc if args.utc else None
+        print(f"\n{'RUN':>4}  {'MODE':<5} {'STARTED':<19}  {'DURATION':>8}  {'PACKETS':>8} {'ALERTS':>6}  SOURCE")
+        unfinished = False
+        for r in db.execute("SELECT * FROM runs ORDER BY id"):
+            unfinished |= r["ended"] is None
+            started = datetime.fromtimestamp(r["started"], tz=tz).strftime("%Y-%m-%d %H:%M:%S")
+            dur = f"{(r['ended'] or r['updated']) - r['started']:.0f} s" + ("" if r["ended"] else "*")
+            print(f"{r['id']:>4}  {r['mode']:<5} {started}  {dur:>8}  {r['packets']:>8} {r['alerts']:>6}  "
+                  f"{r['source'] or ''}")
+        if unfinished:
+            print("(* still running, or stopped without a clean shutdown)")
+    db.close()
+    return 0
+
+
+def cmd_db_prune(args) -> int:
+    if not _need_db(args.db):
+        return 1
+    if args.before:
+        before = _since(args.before)
+    else:
+        # Packet time, not wall-clock time: replayed captures keep their own dates.
+        con = sqlite3.connect(args.db)
+        last = con.execute("SELECT MAX(minute) FROM traffic").fetchone()[0]
+        con.close()
+        if last is None:
+            print("nothing to prune", file=sys.stderr)
+            return 0
+        before = last + 60 - timedelta(days=args.keep_days).total_seconds()
+    deleted = prune(args.db, before)
+    cutoff = datetime.fromtimestamp(before, tz=timezone.utc).isoformat(timespec="seconds")
+    print(f"deleted everything before {cutoff}: " + ", ".join(f"{n} {t}" for t, n in deleted.items()))
     return 0
 
 
@@ -293,8 +461,9 @@ def cmd_baseline_show(args) -> int:
 def cmd_dashboard(args) -> int:
     from .dashboard.app import create_app
 
-    app = create_app(args.db)
-    print(f"dashboard on http://{args.host}:{args.port}  (db: {args.db})", file=sys.stderr)
+    app = create_app(args.db, read_only=args.read_only)
+    print(f"dashboard on http://{args.host}:{args.port}  (db: {args.db}"
+          f"{', read-only' if args.read_only else ''})", file=sys.stderr)
     app.run(host=args.host, port=args.port, debug=False)
     return 0
 
@@ -324,6 +493,60 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("mqtt", help="print MQTT clients and topics from the database")
     p.add_argument("--db", default=DEFAULT_DB)
     p.set_defaults(func=cmd_mqtt)
+
+    p = sub.add_parser("status", help="security posture: headline numbers, why, affected devices, recent alerts")
+    p.add_argument("--db", default=DEFAULT_DB)
+    p.add_argument("--utc", action="store_true")
+    p.add_argument("-w", "--watch", type=float, metavar="SECONDS", help="redraw every N seconds")
+    p.add_argument("-n", "--recent", type=int, default=10, help="recent alerts to show (default 10)")
+    p.add_argument("--json", action="store_true", help="print the full state as JSON")
+    p.add_argument("--width", type=int, help="line width (default: the terminal's, 78-120)")
+    p.set_defaults(func=cmd_status)
+
+    filters = argparse.ArgumentParser(add_help=False)
+    filters.add_argument("--db", default=DEFAULT_DB)
+    filters.add_argument("--severity", choices=("low", "medium", "high", "critical"))
+    filters.add_argument("--status", choices=(*ALERT_STATUSES, "active"),
+                         help="triage status; 'active' = open or acknowledged")
+    filters.add_argument("--rule", help="rule ID or name, e.g. DET-002 or port_scan")
+    filters.add_argument("--ip", help="alerts where this address is the source or destination")
+    filters.add_argument("--since", help="e.g. 30m, 6h, 7d, or an ISO date/time")
+    listing = argparse.ArgumentParser(add_help=False)
+    listing.add_argument("--limit", type=int, default=200)
+    listing.add_argument("--json", action="store_true")
+    listing.add_argument("--utc", action="store_true")
+    p = sub.add_parser("alerts", parents=[filters, listing],
+                       help="query, triage and export the alert log (default action: list)")
+    p.set_defaults(func=cmd_alerts_list)
+    al = p.add_subparsers(dest="action")
+    q = al.add_parser("list", parents=[filters, listing], help="list alerts (the default)")
+    q.set_defaults(func=cmd_alerts_list)
+    for name, status, text in (("ack", "acknowledged", "someone is investigating"),
+                               ("resolve", "resolved", "handled, stops counting towards the posture"),
+                               ("fp", "false_positive", "not a real problem, stops counting"),
+                               ("reopen", "open", "back to open")):
+        q = al.add_parser(name, help=f"mark alerts {status} ({text})")
+        q.add_argument("ids", nargs="+", type=int, metavar="ID")
+        q.add_argument("--note", help="analyst note stored with the alert")
+        q.add_argument("--db", default=DEFAULT_DB)
+        q.set_defaults(func=cmd_alerts_triage, new_status=status)
+    q = al.add_parser("export", parents=[filters], help="export alerts to CSV or JSON (oldest first)")
+    q.add_argument("-o", "--output", help="file to write (default stdout)")
+    q.add_argument("--format", choices=("csv", "json"), default="csv")
+    q.set_defaults(func=cmd_alerts_export)
+
+    p = sub.add_parser("db", help="database information and retention")
+    dbp = p.add_subparsers(dest="action", required=True)
+    q = dbp.add_parser("info", help="schema version, rows per table, monitoring runs")
+    q.add_argument("--utc", action="store_true")
+    q.set_defaults(func=cmd_db_info)
+    q = dbp.add_parser("prune", help="delete alerts, flows and traffic older than a cut-off")
+    g = q.add_mutually_exclusive_group(required=True)
+    g.add_argument("--keep-days", type=float, help="keep the last N days (packet time)")
+    g.add_argument("--before", help="delete before this time (e.g. 2026-10-01 or 30d)")
+    q.set_defaults(func=cmd_db_prune)
+    for q in dbp.choices.values():
+        q.add_argument("--db", default=DEFAULT_DB)
 
     p = sub.add_parser("inventory", help="manage the asset register (known devices)")
     inv = p.add_subparsers(dest="action", required=True)
@@ -363,6 +586,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--db", default=DEFAULT_DB)
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8080)
+    p.add_argument("--read-only", action="store_true", help="disable alert triage from the web page")
     p.set_defaults(func=cmd_dashboard)
 
     args = parser.parse_args(argv)

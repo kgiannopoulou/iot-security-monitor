@@ -1,29 +1,32 @@
-"""Read-only Flask dashboard over the monitor's SQLite database.
+"""Flask dashboard over the monitor's SQLite database.
 
 The monitor writes, the dashboard reads (SQLite WAL mode allows both at
-once), so the dashboard can run in a separate process or container.
+once), so the dashboard can run in a separate process or container. Its
+only write is alert triage (Week 5), which `--read-only` turns off.
 """
 
 from __future__ import annotations
 
-import json
+import io
 import sqlite3
 from pathlib import Path
+from urllib.parse import urlsplit
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, abort, jsonify, render_template, request
 
-SEVERITY_ORDER = ["critical", "high", "medium", "low"]
+from ..state import connect_ro, query_alerts, security_state, write_csv
+from ..storage import ALERT_STATUSES, set_alert_status
 
 
-def create_app(db_path: str | Path) -> Flask:
+
+def create_app(db_path: str | Path, read_only: bool = False) -> Flask:
     app = Flask(__name__)
     db_path = str(db_path)
 
     def query(sql: str, args: tuple = ()) -> list[dict]:
-        if not Path(db_path).exists():
+        con = connect_ro(db_path)
+        if con is None:
             return []
-        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-        con.row_factory = sqlite3.Row
         try:
             return [dict(r) for r in con.execute(sql, args)]
         except sqlite3.OperationalError:  # tables not created yet
@@ -31,35 +34,76 @@ def create_app(db_path: str | Path) -> Flask:
         finally:
             con.close()
 
+    def filtered_alerts(limit: int) -> list[dict]:
+        a = request.args
+        con = connect_ro(db_path)
+        if con is None:
+            return []
+        try:
+            return query_alerts(con, a.get("severity") or None, a.get("status") or None, a.get("rule") or None,
+                                a.get("ip") or None, limit=limit)
+        finally:
+            con.close()
+
     @app.get("/")
     def index():
-        return render_template("index.html")
+        return render_template("index.html", read_only=read_only)
+
+    @app.get("/api/state")
+    def state():
+        """Posture, headline numbers, devices needing attention, recent alerts (Week 5)."""
+        return jsonify({**security_state(db_path), "read_only": read_only})
 
     @app.get("/api/summary")
     def summary():
-        sev = {r["severity"]: r["n"] for r in query("SELECT severity, COUNT(*) n FROM alerts GROUP BY severity")}
-        traffic = query("SELECT COALESCE(SUM(packets),0) packets, COALESCE(SUM(bytes),0) bytes,"
-                        " MIN(minute) first, MAX(minute) last FROM traffic")
-        devices = query("SELECT COUNT(*) n FROM devices")
-        rules = query("SELECT rule_id, rule, COUNT(*) n FROM alerts GROUP BY rule_id, rule ORDER BY rule_id")
+        s = security_state(db_path, recent=0)
         return jsonify({
-            "devices": devices[0]["n"] if devices else 0,
-            "packets": traffic[0]["packets"] if traffic else 0,
-            "bytes": traffic[0]["bytes"] if traffic else 0,
-            "first": traffic[0]["first"] if traffic else None,
-            "last": traffic[0]["last"] if traffic else None,
-            "alerts": sum(sev.values()),
-            "by_severity": [{"severity": s, "count": sev.get(s, 0)} for s in SEVERITY_ORDER],
-            "by_rule": rules,
+            "devices": s["devices"],
+            "packets": s["packets"],
+            "bytes": s["bytes"],
+            "first": s["first"],
+            "last": s["last"],
+            "alerts": s["alerts"],
+            "alerts_active": s["alerts_active"],
+            "posture": s["posture"]["level"],
+            "by_severity": [{"severity": x["severity"], "count": x["count"]} for x in s["by_severity"]],
+            "by_rule": [{"rule_id": r["rule_id"], "rule": r["rule"], "n": r["n"]} for r in s["by_rule"]],
         })
 
     @app.get("/api/alerts")
     def alerts():
-        limit = min(int(request.args.get("limit", 200)), 1000)
-        rows = query("SELECT * FROM alerts ORDER BY ts DESC LIMIT ?", (limit,))
-        for r in rows:
-            r["details"] = json.loads(r["details"] or "{}")
-        return jsonify(rows)
+        """Newest first. Filters: severity, status (or 'active'), rule (ID or name), ip."""
+        return jsonify(filtered_alerts(min(int(request.args.get("limit", 200)), 1000)))
+
+    @app.get("/api/alerts.csv")
+    def alerts_csv():
+        out = io.StringIO()
+        write_csv(filtered_alerts(10**9), out)
+        return Response(out.getvalue(), mimetype="text/csv",
+                        headers={"Content-Disposition": "attachment; filename=iotmon-alerts.csv"})
+
+    @app.post("/api/alerts/<int:alert_id>")
+    def triage(alert_id: int):
+        """Set an alert's triage status: {"status": "acknowledged", "note": "..."}."""
+        if read_only:
+            abort(403, "dashboard is read-only")
+        # A JSON body cannot be sent cross-site without a CORS preflight, which
+        # this app never answers, so a malicious page cannot triage alerts.
+        if not request.is_json:
+            abort(415, "send application/json")
+        origin = request.headers.get("Origin")
+        if origin and urlsplit(origin).netloc != request.host:
+            abort(403, "cross-origin request")
+        body = request.get_json(silent=True) or {}
+        status = body.get("status")
+        if status not in ALERT_STATUSES:
+            abort(400, f"status must be one of {', '.join(ALERT_STATUSES)}")
+        note = body.get("note")
+        if note is not None:
+            note = str(note).strip()[:500] or None
+        if not Path(db_path).exists() or not set_alert_status(db_path, [alert_id], status, note):
+            abort(404, f"no alert {alert_id}")
+        return jsonify(query("SELECT id, status, note, updated FROM alerts WHERE id = ?", (alert_id,))[0])
 
     @app.get("/api/devices")
     def devices():
@@ -87,5 +131,10 @@ def create_app(db_path: str | Path) -> Flask:
     @app.get("/api/flows")
     def flows():
         return jsonify(query("SELECT * FROM flows ORDER BY bytes DESC LIMIT 25"))
+
+    @app.get("/api/runs")
+    def runs():
+        """Monitoring runs, newest first (Week 5)."""
+        return jsonify(query("SELECT * FROM runs ORDER BY id DESC LIMIT 50"))
 
     return app

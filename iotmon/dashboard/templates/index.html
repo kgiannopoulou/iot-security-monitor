@@ -41,8 +41,9 @@
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
   .card h2 { font-size: 13px; font-weight: 600; margin: 0 0 12px; color: var(--ink-2); text-transform: uppercase; letter-spacing: .04em; }
   .tile { grid-column: span 3; }
-  .tile .v { font-size: 30px; font-weight: 600; }
+  .tile .v { font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .tile .l { color: var(--ink-2); }
+  .tile .x { color: var(--muted); font-size: 12px; min-height: 1.45em; }
   .wide { grid-column: span 8; }
   .narrow { grid-column: span 4; }
   .full { grid-column: span 12; }
@@ -60,9 +61,8 @@
   .sev::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
   .sev.critical { --c: var(--critical); } .sev.high { --c: var(--serious); }
   .sev.medium { --c: var(--warning); } .sev.low { --c: var(--good); }
-  .sev .ico { font-size: 11px; }
   .bars { display: grid; gap: 10px; }
-  .bar-row { display: grid; grid-template-columns: 110px 1fr 36px; gap: 8px; align-items: center; }
+  .bar-row { display: grid; grid-template-columns: 110px 1fr 88px; gap: 8px; align-items: center; }
   .track { height: 14px; }
   .fill { height: 100%; border-radius: 0 4px 4px 0; background: var(--c); min-width: 2px; }
   .muted { color: var(--muted); }
@@ -72,10 +72,48 @@
   .asset.pending, .asset.new { color: var(--warning); }
   .empty { color: var(--muted); padding: 24px 0; text-align: center; }
   details summary { cursor: pointer; color: var(--ink-2); }
+
+  /* posture banner (Week 5): the one-line answer to "are we OK?" */
+  .posture { grid-column: span 12; display: grid; grid-template-columns: auto 1fr auto; gap: 4px 24px;
+             align-items: start; border-left: 6px solid var(--pc, var(--muted)); }
+  .posture .lvl { font-size: 26px; font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
+  .posture .lvl small { display: block; font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+  .posture ul { margin: 2px 0 0; padding-left: 18px; color: var(--ink-2); }
+  .posture .run { color: var(--muted); font-size: 12px; text-align: right; white-space: nowrap; }
+  .posture .run b { color: var(--ink-2); font-weight: 600; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 5px; }
+  .dot.live { background: var(--good); }
+  .posture.CRITICAL { --pc: var(--critical); } .posture.AT-RISK { --pc: var(--serious); }
+  .posture.WATCH { --pc: var(--warning); } .posture.OK { --pc: var(--good); }
+
+  /* alert triage */
+  .filters { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 10px; }
+  .filters label { color: var(--muted); font-size: 12px; display: inline-flex; gap: 6px; align-items: center; }
+  select, input[type=text], button, a.btn {
+    font: inherit; font-size: 13px; color: var(--ink); background: var(--page);
+    border: 1px solid var(--axis); border-radius: 6px; padding: 4px 8px; }
+  input[type=text] { width: 140px; }
+  button, a.btn { cursor: pointer; text-decoration: none; white-space: nowrap; }
+  button:hover, a.btn:hover { border-color: var(--ink-2); }
+  button:disabled { opacity: .5; cursor: default; }
+  .filters .count { color: var(--muted); margin-left: auto; }
+  .acts { display: flex; gap: 4px; flex-wrap: wrap; }
+  .acts button { padding: 2px 7px; font-size: 12px; }
+  .st { white-space: nowrap; font-weight: 600; }
+  .st.acknowledged { color: var(--ink-2); }
+  .st.resolved, .st.false_positive { color: var(--muted); font-weight: 400; }
+  tr.closed td { color: var(--muted); }
+  tr.closed .sev { opacity: .55; }
+  .note { color: var(--ink-2); font-style: italic; margin-top: 2px; }
+  .notebox { display: flex; gap: 6px; margin-top: 8px; }
+  .notebox input { flex: 1; width: auto; min-width: 120px; }
+  .err { color: var(--critical); font-size: 12px; }
+
   @media (max-width: 900px) {
     main { padding: 8px 16px 24px; }
     .tile { grid-column: span 6; } .wide, .narrow { grid-column: span 12; }
     header { padding: 16px 16px 8px; }
+    .posture { grid-template-columns: 1fr; } .posture .run { text-align: left; }
   }
 </style>
 </head>
@@ -85,10 +123,16 @@
   <span class="sub" id="window">waiting for data...</span>
 </header>
 <main>
-  <section class="card tile"><div class="v" id="k-devices">-</div><div class="l">devices on the network</div></section>
-  <section class="card tile"><div class="v" id="k-packets">-</div><div class="l">packets observed</div></section>
-  <section class="card tile"><div class="v" id="k-alerts">-</div><div class="l">alerts</div></section>
-  <section class="card tile"><div class="v" id="k-high">-</div><div class="l">high or critical</div></section>
+  <section class="card posture" id="posture" aria-live="polite">
+    <div class="lvl" id="p-level">-<small>security posture</small></div>
+    <ul id="p-reasons"></ul>
+    <div class="run" id="p-run"></div>
+  </section>
+
+  <section class="card tile"><div class="v" id="k-devices">-</div><div class="l">Devices monitored</div><div class="x" id="x-devices"></div></section>
+  <section class="card tile"><div class="v" id="k-packets">-</div><div class="l">Packets analyzed</div><div class="x" id="x-packets"></div></section>
+  <section class="card tile"><div class="v" id="k-alerts">-</div><div class="l">Security alerts</div><div class="x" id="x-alerts"></div></section>
+  <section class="card tile"><div class="v" id="k-high">-</div><div class="l">High-severity alerts</div><div class="x" id="x-high"></div></section>
 
   <section class="card wide">
     <h2>Traffic per minute by protocol (packets)</h2>
@@ -100,13 +144,29 @@
     <h2>Alerts by severity</h2>
     <div class="bars" id="sev-bars"></div>
     <h2 style="margin-top:24px">Alerts by rule</h2>
-    <table id="rules"><tbody></tbody></table>
+    <table id="rules"><thead><tr><th>Rule</th><th></th><th class="num">Active</th><th class="num">Total</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <section class="card full">
+    <h2>Devices needing attention</h2>
+    <div class="scroll"><table id="risky">
+      <thead><tr><th>IP</th><th>Vendor</th><th>Role</th><th class="num">Active alerts</th><th>Worst</th><th>Rules</th><th>Asset status</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
   </section>
 
   <section class="card full">
     <h2>Alerts</h2>
+    <div class="filters">
+      <label>Severity <select id="f-severity"><option value="">all</option><option>critical</option><option>high</option><option>medium</option><option>low</option></select></label>
+      <label>Status <select id="f-status"><option value="">all</option><option value="active">active (open + ack)</option><option>open</option><option>acknowledged</option><option>resolved</option><option value="false_positive">false positive</option></select></label>
+      <label>Rule <select id="f-rule"><option value="">all</option></select></label>
+      <label>IP <input type="text" id="f-ip" placeholder="192.168.1.66" spellcheck="false"></label>
+      <a class="btn" id="export" href="api/alerts.csv" download>Export CSV</a>
+      <span class="count" id="f-count"></span>
+    </div>
     <div class="scroll"><table id="alerts">
-      <thead><tr><th>Time</th><th>Severity</th><th>Rule</th><th>Alert</th><th>ATT&amp;CK</th><th>Details</th></tr></thead>
+      <thead><tr><th class="num">#</th><th>Time</th><th>Severity</th><th>Rule</th><th>Alert</th><th>Status</th><th id="th-acts">Triage</th><th>Evidence</th></tr></thead>
       <tbody></tbody>
     </table></div>
   </section>
@@ -137,6 +197,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
+const READ_ONLY = {{ 'true' if read_only else 'false' }};
 const UTC = new URLSearchParams(location.search).has("utc");
 // Fixed protocol -> categorical slot, so a protocol keeps its colour when others come and go.
 const SLOTS = ["MQTT", "HTTPS", "DNS", "HTTP", "NTP", "ARP", "TELNET"];
@@ -151,6 +212,8 @@ const fmtTime = (ts, withDate) => {
 };
 const fmtBytes = n => n >= 1e6 ? (n / 1e6).toFixed(1) + " MB" : n >= 1e3 ? (n / 1e3).toFixed(1) + " kB" : n + " B";
 const sevBadge = s => `<span class="sev ${esc(s)}">${esc(s)}</span>`;
+const STATUS_LABEL = {open: "open", acknowledged: "acknowledged", resolved: "resolved", false_positive: "false positive"};
+const ACTIVE = ["open", "acknowledged"];
 
 let chart;
 function drawTraffic(data) {
@@ -175,6 +238,7 @@ function drawTraffic(data) {
 
   const labels = data.minutes.map(m => fmtTime(m).slice(0, 5));
   if (chart) { chart.data.labels = labels; chart.data.datasets = datasets; chart.update("none"); return; }
+  if (typeof Chart === "undefined") return;  // CDN unreachable: everything else still works
   Chart.defaults.font.family = 'system-ui, -apple-system, "Segoe UI", sans-serif';
   Chart.defaults.color = css("--muted");
   chart = new Chart(document.getElementById("traffic"), {
@@ -197,40 +261,158 @@ function drawTraffic(data) {
   });
 }
 
-function drawSummary(s) {
-  document.getElementById("k-devices").textContent = s.devices.toLocaleString();
-  document.getElementById("k-packets").textContent = s.packets.toLocaleString();
-  document.getElementById("k-alerts").textContent = s.alerts.toLocaleString();
-  const hi = s.by_severity.filter(x => x.severity === "high" || x.severity === "critical").reduce((a, x) => a + x.count, 0);
-  document.getElementById("k-high").textContent = hi.toLocaleString();
+function drawState(s) {
+  // posture banner
+  const p = s.posture;
+  const banner = document.getElementById("posture");
+  banner.className = "card posture " + p.level.replace(" ", "-");
+  document.getElementById("p-level").innerHTML = `${esc(p.level)}<small>security posture</small>`;
+  document.getElementById("p-reasons").innerHTML = p.reasons.map(r => `<li>${esc(r)}</li>`).join("");
+  const run = s.run;
+  document.getElementById("p-run").innerHTML = run ? `
+    <div><span class="dot ${run.active ? "live" : ""}"></span><b>${run.active ? "monitoring live" : run.ended ? "run finished" : "monitor stopped"}</b></div>
+    <div>run #${run.id}: ${esc(run.mode)} ${esc(run.source || "")}</div>
+    <div>${run.packets.toLocaleString()} packets, ${run.alerts} alerts</div>
+    <div>${run.count} run${run.count === 1 ? "" : "s"} in this database</div>` : "";
+
+  // headline tiles
+  const set = (id, v) => document.getElementById(id).textContent = v;
+  set("k-devices", s.devices.toLocaleString());
+  set("x-devices", s.devices_unreviewed ? `${s.devices_unreviewed} not approved` : "");
+  set("k-packets", s.packets.toLocaleString());
+  set("x-packets", s.packets ? fmtBytes(s.bytes) : "");
+  set("k-alerts", s.alerts.toLocaleString());
+  set("x-alerts", s.alerts ? `${s.alerts_active} active` : "");
+  set("k-high", s.high.toLocaleString());
+  set("x-high", s.high ? `${s.high_active} active` : "");
   if (s.first !== null) {
-    document.getElementById("window").textContent =
-      `${fmtTime(s.first, true)} - ${fmtTime(s.last + 60, true)}${UTC ? " UTC" : ""} · ${fmtBytes(s.bytes)} · refreshes every 5 s`;
+    set("window", `${fmtTime(s.first, true)} - ${fmtTime(s.last + 60, true)}${UTC ? " UTC" : ""} · ${fmtBytes(s.bytes)} · refreshes every 5 s`);
   }
+
+  // severity bars: full bar = total, number shows active / total
   const max = Math.max(1, ...s.by_severity.map(x => x.count));
   const colour = {critical: "--critical", high: "--serious", medium: "--warning", low: "--good"};
   document.getElementById("sev-bars").innerHTML = s.by_severity.map(x => `
-    <div class="bar-row" title="${x.count} ${x.severity} alerts">
+    <div class="bar-row" title="${x.open} active of ${x.count} ${x.severity} alerts">
       ${sevBadge(x.severity)}
       <div class="track"><div class="fill" style="--c:var(${colour[x.severity]});width:${x.count / max * 100}%"></div></div>
-      <span class="num">${x.count}</span>
+      <span class="num">${x.open} <span class="muted">/ ${x.count}</span></span>
     </div>`).join("");
   document.querySelector("#rules tbody").innerHTML = s.by_rule.length
-    ? s.by_rule.map(r => `<tr><td class="mono">${esc(r.rule_id || "")}</td><td class="mono">${esc(r.rule)}</td><td class="num">${r.n}</td></tr>`).join("")
-    : `<tr><td class="muted">no alerts</td></tr>`;
+    ? s.by_rule.map(r => `<tr><td class="mono">${esc(r.rule_id || "")}</td><td class="mono">${esc(r.rule)}</td><td class="num">${r.open}</td><td class="num">${r.n}</td></tr>`).join("")
+    : `<tr><td colspan="4" class="muted">no alerts</td></tr>`;
+
+  // rule filter options follow the rules present in the database
+  const sel = document.getElementById("f-rule");
+  const want = s.by_rule.map(r => r.rule_id || r.rule);
+  const have = [...sel.options].slice(1).map(o => o.value);
+  if (want.join() !== have.join()) {
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">all</option>` + s.by_rule.map(r =>
+      `<option value="${esc(r.rule_id || r.rule)}">${esc(r.rule_id || "")} ${esc(r.rule)}</option>`).join("");
+    sel.value = cur;
+  }
+
+  document.querySelector("#risky tbody").innerHTML = s.risky_devices.length ? s.risky_devices.map(d => `
+    <tr>
+      <td class="mono"><a href="#alerts" data-ip="${esc(d.ips.split(",")[0])}" class="ip-link">${esc(d.ips)}</a></td>
+      <td>${esc(d.vendor)}</td>
+      <td class="muted">${esc(d.role)}</td>
+      <td class="num">${d.alerts}</td>
+      <td>${sevBadge(d.top_severity)}</td>
+      <td class="mono">${esc(d.rules.join(", "))}</td>
+      <td>${d.status ? `<span class="asset ${esc(d.status)}">${esc(d.status)}</span>` : `<span class="muted">-</span>`}</td>
+    </tr>`).join("") : `<tr><td colspan="7" class="empty">No device has an active alert.</td></tr>`;
+}
+
+// -- alerts: filters, triage, notes ----------------------------------------- //
+const openDetails = new Set();
+function alertQuery() {
+  const q = new URLSearchParams();
+  for (const k of ["severity", "status", "rule", "ip"]) {
+    const v = document.getElementById("f-" + k).value.trim();
+    if (v) q.set(k, v);
+  }
+  return q;
+}
+
+function triageButtons(a) {
+  if (READ_ONLY) return "";
+  const b = (status, label, title) => `<button data-id="${a.id}" data-status="${status}" title="${title}">${label}</button>`;
+  if (!ACTIVE.includes(a.status)) return `<div class="acts">${b("open", "Reopen", "Back to open")}</div>`;
+  return `<div class="acts">
+    ${a.status === "open" ? b("acknowledged", "Ack", "Someone is investigating") : ""}
+    ${b("resolved", "Resolve", "Handled: stops counting towards the posture")}
+    ${b("false_positive", "False +", "Not a real problem: stops counting")}
+  </div>`;
 }
 
 function drawAlerts(rows) {
-  document.querySelector("#alerts tbody").innerHTML = rows.length ? rows.map(a => `
-    <tr>
+  const tbody = document.querySelector("#alerts tbody");
+  // don't redraw under the analyst's cursor while they type a note
+  if (tbody.contains(document.activeElement) && document.activeElement.tagName === "INPUT") return;
+  document.getElementById("f-count").textContent = `${rows.length} shown`;
+  tbody.innerHTML = rows.length ? rows.map(a => `
+    <tr class="${ACTIVE.includes(a.status) ? "" : "closed"}">
+      <td class="num muted">${a.id}</td>
       <td class="mono">${fmtTime(a.ts)}</td>
       <td>${sevBadge(a.severity)}</td>
       <td class="mono">${esc(a.rule_id || "")}<br><span class="muted">${esc(a.rule)}</span></td>
-      <td>${esc(a.title)}</td>
-      <td class="muted">${esc(a.mitre)}</td>
-      <td><details><summary>view</summary><pre class="mono">${esc(JSON.stringify(a.details, null, 2))}</pre></details></td>
-    </tr>`).join("") : `<tr><td colspan="6" class="empty">No alerts. The network looks like its baseline.</td></tr>`;
+      <td>${esc(a.title)}<div class="muted">${esc(a.mitre)}</div>${a.note ? `<div class="note">“${esc(a.note)}”</div>` : ""}</td>
+      <td><span class="st ${esc(a.status)}">${esc(STATUS_LABEL[a.status] || a.status)}</span>
+          ${a.updated ? `<div class="muted mono">${fmtTime(a.updated, true)}</div>` : ""}</td>
+      <td>${triageButtons(a)}</td>
+      <td><details data-id="${a.id}" ${openDetails.has(a.id) ? "open" : ""}><summary>view</summary>
+        <pre class="mono">${esc(JSON.stringify(a.details, null, 2))}</pre>
+        ${READ_ONLY ? "" : `<div class="notebox"><input type="text" placeholder="analyst note" value="${esc(a.note || "")}" data-note="${a.id}" maxlength="500">
+          <button data-id="${a.id}" data-status="${esc(a.status)}" data-save="1">Save note</button></div>`}
+        <div class="err" data-err="${a.id}"></div>
+      </details></td>
+    </tr>`).join("") : `<tr><td colspan="8" class="empty">${alertQuery().toString() ? "No alerts match the filters." : "No alerts. The network looks like its baseline."}</td></tr>`;
+  document.getElementById("export").href = "api/alerts.csv?" + alertQuery();
 }
+
+async function triage(id, status, note) {
+  const body = {status};
+  if (note !== undefined) body.note = note;
+  const r = await fetch(`api/alerts/${id}`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  if (!r.ok) {
+    const err = document.querySelector(`[data-err="${id}"]`);
+    if (err) err.textContent = `could not update: HTTP ${r.status}`;
+    console.error(await r.text());
+  }
+  refresh();
+}
+
+document.querySelector("#alerts tbody").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-id]");
+  if (!btn) return;
+  btn.disabled = true;
+  const id = Number(btn.dataset.id);
+  const note = btn.dataset.save ? document.querySelector(`[data-note="${id}"]`).value : undefined;
+  triage(id, btn.dataset.status, note);
+});
+document.querySelector("#alerts tbody").addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.dataset.note) {
+    const btn = e.target.parentElement.querySelector("button");
+    triage(Number(btn.dataset.id), btn.dataset.status, e.target.value);
+    e.target.blur();
+  }
+});
+document.querySelector("#alerts tbody").addEventListener("toggle", e => {
+  const id = Number(e.target.dataset.id);
+  e.target.open ? openDetails.add(id) : openDetails.delete(id);
+}, true);
+for (const id of ["f-severity", "f-status", "f-rule"]) document.getElementById(id).addEventListener("change", refresh);
+document.getElementById("f-ip").addEventListener("input", () => { clearTimeout(window._ipT); window._ipT = setTimeout(refresh, 300); });
+document.querySelector("#risky").addEventListener("click", e => {
+  const a = e.target.closest(".ip-link");
+  if (!a) return;
+  document.getElementById("f-ip").value = a.dataset.ip;
+  document.getElementById("f-status").value = "active";
+  refresh();
+});
+if (READ_ONLY) document.getElementById("th-acts").textContent = "";
 
 function drawDevices(rows) {
   document.querySelector("#devices tbody").innerHTML = rows.length ? rows.map(d => `
@@ -279,9 +461,9 @@ function drawMqtt(m) {
 async function refresh() {
   try {
     const get = p => fetch(p).then(r => r.json());
-    const [s, t, a, d, m] = await Promise.all([get("api/summary"), get("api/traffic"), get("api/alerts"),
+    const [s, t, a, d, m] = await Promise.all([get("api/state"), get("api/traffic"), get("api/alerts?" + alertQuery()),
                                                get("api/devices"), get("api/mqtt")]);
-    drawSummary(s); drawTraffic(t); drawAlerts(a); drawDevices(d); drawMqtt(m);
+    drawState(s); drawTraffic(t); drawAlerts(a); drawDevices(d); drawMqtt(m);
   } catch (e) { console.error(e); }
 }
 refresh();
