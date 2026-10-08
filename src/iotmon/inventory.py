@@ -70,21 +70,49 @@ class Device:
     services: set = field(default_factory=set)  # ports this device answered on
     peers: set = field(default_factory=set)
     mqtt_publisher: bool = False
+    modbus_server: bool = False  # answered on Modbus/TCP (a PLC)
+    modbus_client: bool = False  # sent Modbus requests (engineering workstation / HMI)
     connections: int = 0  # flows (TCP or UDP conversations) this device took part in
     status: str = ""  # asset-register status: approved / pending / new ("" = no register)
+    zone: str = ""  # OT / IT / ... from the zone policy ("" = no policy / unassigned)
+    policy_role: str = ""  # role declared in the OT policy (plc, hmi, engineering_workstation)
+    policy_label: str = ""  # human label from the OT policy
+    risk_score: int = 0
 
     @property
     def role(self) -> str:
+        if self.policy_role:
+            return {"plc": "PLC (Modbus/TCP server)", "hmi": "HMI panel",
+                    "engineering_workstation": "Engineering workstation"}.get(self.policy_role, self.policy_role)
         for port, role in ROLE_BY_SERVICE:
             if port in self.services:
                 if role == "Web interface" and 23 in self.services:
                     return "IP camera / embedded web device"
                 return role
+        if self.modbus_client:
+            return "Modbus/TCP client (engineering / HMI)"
         if self.mqtt_publisher:
             return "MQTT client (sensor/actuator)"
         if self.protocols & {"HTTP", "HTTPS"}:
             return "client"
         return "unclassified"
+
+    @property
+    def device_type(self) -> str:
+        """A short machine-readable type for the asset record (brief's `device_type`)."""
+        if self.policy_role == "plc" or self.modbus_server:
+            return "PLC"
+        if self.policy_role:
+            return {"hmi": "HMI", "engineering_workstation": "EWS"}.get(self.policy_role, self.policy_role.upper())
+        if self.modbus_client:
+            return "Modbus client"
+        if 1883 in self.services or 8883 in self.services:
+            return "MQTT broker"
+        if self.mqtt_publisher:
+            return "IoT sensor/actuator"
+        if 80 in self.services and 23 in self.services:
+            return "IP camera"
+        return "host"
 
     def as_dict(self) -> dict:
         return {
@@ -105,6 +133,9 @@ class Device:
             "peers": len(self.peers),
             "connections": self.connections,
             "status": self.status,
+            "zone": self.zone,
+            "device_type": self.device_type,
+            "risk_score": self.risk_score,
         }
 
 
@@ -118,6 +149,7 @@ class Inventory:
         self.networks = [ipaddress.ip_network(n) for n in lab_networks]
         self.internal = [ipaddress.ip_network(n) for n in
                          (DEFAULT_INTERNAL if internal_networks is None else internal_networks)]
+        self.policy = None  # set by the Monitor; gives devices their OT zone, role and risk
         self.devices: dict[str, Device] = {}
         self._by_ip: dict[str, str] = {}
         # Address changes caused by the last update(), read by the device_change rule:
@@ -182,6 +214,16 @@ class Inventory:
                 dev.name = rec.meta["mqtt_client_id"]
             if rec.meta.get("mqtt_topics") and not rec.is_response:
                 dev.mqtt_publisher = True
+            if rec.app == "MODBUS":
+                if rec.is_response:
+                    dev.modbus_server = True
+                elif rec.dport == 502:
+                    dev.modbus_client = True
+            if self.policy is not None:
+                dev.zone = self.policy.zone_of(rec.src_ip) or ""
+                dev.policy_role = self.policy.assets.get(rec.src_ip, {}).get("role", "")
+                dev.policy_label = self.policy.label_of(rec.src_ip)
+                dev.risk_score = self._risk(dev)
 
         if rec.protocol != "ARP":
             dst = self.lookup(rec.dst_ip)
@@ -191,6 +233,23 @@ class Inventory:
                 if rec.src_ip:
                     dst.peers.add(rec.src_ip)
         return new
+
+    # Risk weighting. A documented heuristic (0-100), not a probability: a
+    # device's zone and role set the baseline, exposure raises it. Used to
+    # rank the asset register, and it is shown in each asset's record.
+    ZONE_RISK = {"OT": 45, "IoT": 25, "IT": 15}
+    TYPE_RISK = {"PLC": 25, "MQTT broker": 15, "EWS": 12, "HMI": 12, "IP camera": 10}
+
+    def _risk(self, dev: Device) -> int:
+        score = self.ZONE_RISK.get(dev.zone, 15 if dev.zone else 15)
+        score += self.TYPE_RISK.get(dev.device_type, 0)
+        if 23 in dev.services:  # exposed Telnet
+            score += 15
+        if any(self.is_external(p) for p in dev.peers):  # talks to / from the internet
+            score += 15
+        if dev.status in ("pending", "new"):  # not yet reviewed
+            score += 10
+        return max(0, min(100, score))
 
     def count_flow(self, client_ip: str, server_ip: str) -> None:
         """A new conversation started: one more connection for each local end."""

@@ -1,0 +1,33 @@
+# Site configuration for the monitor in the OT lab (lab/ot/). Overrides
+# config.yaml and rules/detection_rules.yaml for keys set here.
+#
+# One monitored switch carries the whole lab (192.168.10.0/24). The zones are
+# logical, by IP: the control devices sit in the lower half (OT) and the
+# office / attacker host in the upper half (IT), so a connection from .130 to
+# the PLC is a segmentation crossing even though both share the bridge.
+
+network:
+  lab_networks: ["192.168.10.0/24"]
+
+ot:
+  zones:
+    OT: ["192.168.10.0/25"]        # .1-.127  control network (PLC, HMI, engineering)
+    IT: ["192.168.10.128/25"]      # .128-.255  office / enterprise
+  assets:
+    "192.168.10.1": {role: gateway, label: "OT gateway"}
+    "192.168.10.20": {role: plc, label: "Line 1 PLC"}
+    "192.168.10.10": {role: engineering_workstation, label: "Engineering workstation"}
+    "192.168.10.11": {role: hmi, label: "HMI panel"}
+  policy:
+    allow:
+      engineering_workstation: [plc, hmi]
+      hmi: [plc]
+      plc: [hmi]
+  modbus:
+    allowed_clients: [engineering_workstation, hmi]
+    writers: [engineering_workstation]
+  expected_protocols: [MODBUS, ARP, NTP, ICMP]
+
+detections:
+  new_device:
+    known_devices: ["192.168.10.1"]   # the Docker bridge gateway is infrastructure

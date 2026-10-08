@@ -35,7 +35,7 @@ so on.
 | `src/database.py` | `src/iotmon/storage.py` | SQLite schema, triage, retention |
 | `dashboard/app.py` | `src/iotmon/dashboard/app.py` | Inside the package, so `pip install` ships it and `iotmon dashboard` finds it |
 | `simulator/iot_devices.py` | [`simulator/iot_devices.py`](../simulator/iot_devices.py), [`simulator/attacks.py`](../simulator/attacks.py) | The simulated devices and the controlled attacks, moved from `lab/devices/` and `lab/scenarios/` |
-| `tests/test_detection.py` | `tests/` (9 files) | One file per area: parser, detections, scenarios, end to end, inventory, MQTT, dashboard, logging, rules/config |
+| `tests/test_detection.py` | `tests/` (10 files) | One file per area: parser, detections, scenarios, end to end, inventory, MQTT, dashboard, logging, rules/config, OT |
 | `screenshots/` | [`screenshots/`](../screenshots) | Architecture diagram, dashboard screenshots, demo GIF |
 | `docs/architecture.md` | [`docs/`](.) | Architecture plus weekly write-ups, rules, design decisions, lessons learned |
 

@@ -180,3 +180,86 @@ rules:
       peak_factor: 5.0          # ... or below 5x the client's busiest baseline window
       topic_alerts: 3           # new-topic alerts per client per cooldown, so one rogue client cannot flood the queue
       cooldown_s: 600
+
+  # --- OT / ICS rules (Week 7) ------------------------------------------- #
+  # These stay silent unless an `ot:` section is configured (zones + policy).
+
+  - id: DET-010
+    detector: ot_new_asset
+    name: New OT asset detected
+    description: >
+      A device appears in the OT zone, or a host starts answering Modbus/TCP
+      (a PLC). High when the asset is not declared in the OT policy.
+    severities: [medium, high]
+    attack: ["T1200 Hardware Additions", "T0848 Rogue Master (ICS)"]
+    enabled: true
+    settings:
+      cooldown_s: 3600
+
+  - id: DET-011
+    detector: unauthorized_modbus
+    name: Unauthorized Modbus client
+    description: >
+      A Modbus client the policy does not allow to talk to a PLC. Reading is
+      high; writing (changing the process) is critical. An allowed reader
+      that writes, without being on the writers list, is high.
+    severities: [high, critical]
+    attack: ["T1021 Remote Services", "T0855 Unauthorized Command Message (ICS)",
+             "T0836 Modify Parameter (ICS)"]
+    enabled: true
+    settings:
+      cooldown_s: 600
+
+  - id: DET-012
+    detector: ot_segmentation
+    name: IT host communicating with OT device
+    description: >
+      A host outside the OT zone opens a connection to an OT device that the
+      policy does not permit (IT/IoT -> OT). External sources are critical,
+      internal ones high.
+    severities: [high, critical]
+    attack: ["T1021 Remote Services", "T0886 Remote Services (ICS)"]
+    enabled: true
+    settings:
+      cooldown_s: 600
+
+  - id: DET-013
+    detector: ot_protocol
+    name: Unexpected protocol in OT network
+    description: >
+      An application protocol inside the OT zone that is not on the expected
+      list (e.g. Telnet, HTTP or MQTT reaching a PLC). Remote-access protocols
+      are high, anything else medium.
+    severities: [medium, high]
+    attack: ["T0869 Standard Application Layer Protocol (ICS)"]
+    enabled: true
+    settings:
+      cooldown_s: 600
+
+  - id: DET-014
+    detector: modbus_rate
+    name: Abnormal Modbus request rate
+    description: >
+      A Modbus client sending far more requests than during the baseline
+      (a polling flood, or an enumeration of registers): requests per window
+      >= max(min_requests, peak_factor x learned peak).
+    severities: [medium]
+    attack: ["T0801 Monitor Process State (ICS)", "T0814 Denial of Service (ICS)"]
+    enabled: true
+    settings:
+      window_s: 60
+      min_requests: 120         # never alert below this many requests per window
+      peak_factor: 5.0          # ... or below 5x the client's busiest baseline window
+      cooldown_s: 300
+
+  - id: DET-015
+    detector: ot_external
+    name: OT device communicating externally
+    description: >
+      An OT-zone device opens a connection to the internet. A PLC reaching
+      the internet is critical; any other OT device is high.
+    severities: [high, critical]
+    attack: ["T1071 Application Layer Protocol", "T0883 Internet Accessible Device (ICS)"]
+    enabled: true
+    settings:
+      cooldown_s: 600

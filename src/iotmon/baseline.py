@@ -41,6 +41,10 @@ class DeviceProfile:
     mqtt_publish: set = field(default_factory=set)
     mqtt_subscribe: set = field(default_factory=set)
     peak_mqtt_messages: int = 0
+    modbus_servers: set = field(default_factory=set)   # PLCs this client talked to
+    modbus_functions: set = field(default_factory=set)  # function names used as a client
+    modbus_wrote: bool = False                          # issued a write during the baseline
+    peak_modbus_requests: int = 0
 
     def as_dict(self) -> dict:
         d = {"client_ports": sorted(self.client_ports), "server_ports": sorted(self.server_ports),
@@ -49,6 +53,10 @@ class DeviceProfile:
             d.update({"mqtt_client_ids": sorted(self.mqtt_client_ids), "mqtt_publish": sorted(self.mqtt_publish),
                       "mqtt_subscribe": sorted(self.mqtt_subscribe),
                       "peak_mqtt_messages": self.peak_mqtt_messages})
+        if self.modbus_servers or self.modbus_functions:
+            d.update({"modbus_servers": sorted(self.modbus_servers),
+                      "modbus_functions": sorted(self.modbus_functions),
+                      "modbus_wrote": self.modbus_wrote, "peak_modbus_requests": self.peak_modbus_requests})
         return d
 
 
@@ -110,6 +118,16 @@ class Baseline:
         prof = self.devices.setdefault(ip, DeviceProfile())
         prof.peak_mqtt_messages = max(prof.peak_mqtt_messages, messages)
 
+    def observe_modbus(self, client: str, server: str, func_name: str, write: bool) -> None:
+        prof = self.devices.setdefault(client, DeviceProfile())
+        prof.modbus_servers.add(server)
+        prof.modbus_functions.add(func_name)
+        prof.modbus_wrote = prof.modbus_wrote or write
+
+    def observe_modbus_rate(self, ip: str, requests: int) -> None:
+        prof = self.devices.setdefault(ip, DeviceProfile())
+        prof.peak_modbus_requests = max(prof.peak_modbus_requests, requests)
+
     def topic_owners(self, topic: str) -> set[str]:
         """Devices that published this topic during the baseline."""
         return {ip for ip, p in self.devices.items() if topic in p.mqtt_publish}
@@ -128,7 +146,9 @@ class Baseline:
             self.devices[ip] = DeviceProfile(set(d.get("client_ports", [])), set(d.get("server_ports", [])),
                                              set(d.get("external_peers", [])), int(d.get("peak_connections", 0)),
                                              set(d.get("mqtt_client_ids", [])), set(d.get("mqtt_publish", [])),
-                                             set(d.get("mqtt_subscribe", [])), int(d.get("peak_mqtt_messages", 0)))
+                                             set(d.get("mqtt_subscribe", [])), int(d.get("peak_mqtt_messages", 0)),
+                                             set(d.get("modbus_servers", [])), set(d.get("modbus_functions", [])),
+                                             bool(d.get("modbus_wrote", False)), int(d.get("peak_modbus_requests", 0)))
 
     def save(self) -> None:
         if not self.path:

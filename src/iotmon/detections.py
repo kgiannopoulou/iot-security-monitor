@@ -13,6 +13,15 @@ a pcap gives exactly the same alerts as watching the traffic live.
     DET-007  failed_connections   Repeated failed connections
     DET-008  device_change        Device address change (IP conflict / change)
     DET-009  mqtt_activity        Abnormal MQTT activity (new client, burst, topic, subscription)
+
+OT / ICS rules (Week 7), driven by the zone policy and the Modbus tracker:
+
+    DET-010  ot_new_asset         New OT asset detected
+    DET-011  unauthorized_modbus  Unauthorized Modbus client / write
+    DET-012  ot_segmentation      IT/IoT host communicating with an OT device
+    DET-013  ot_protocol          Unexpected protocol in the OT zone
+    DET-014  modbus_rate          Abnormal Modbus request rate
+    DET-015  ot_external          OT device communicating externally
 """
 
 from __future__ import annotations
@@ -23,8 +32,10 @@ from collections import Counter, defaultdict, deque
 from typing import TYPE_CHECKING
 
 from .baseline import Baseline
+from .modbus import ModbusTracker
 from .models import KNOWN_SERVICES, Alert, PacketRecord
 from .mqtt import MqttTracker, wildcard_scope
+from .policy import ZonePolicy
 
 if TYPE_CHECKING:
     from .assets import AssetRegister
@@ -36,10 +47,11 @@ class Context:
     """What the pipeline knows when a detector sees a packet."""
 
     def __init__(self, inventory: Inventory, assets: AssetRegister | None = None,
-                 baseline: Baseline | None = None):
+                 baseline: Baseline | None = None, policy: ZonePolicy | None = None):
         self.inventory = inventory
         self.assets = assets  # persistent asset register, when one was loaded
         self.baseline = baseline if baseline is not None else Baseline()
+        self.policy = policy if policy is not None else ZonePolicy()  # OT zones and allowlist
         self.learning = False  # still inside the baseline learning period
         self.new_device: Device | None = None
         self.new_flow: Flow | None = None  # conversation opened by this packet
@@ -47,6 +59,7 @@ class Context:
         self.first_ts: float | None = None
         self.fired: dict[tuple[str, str | None], float] = {}  # (rule, src) -> last alert time
         self.mqtt = MqttTracker()  # broker-level view; .events holds this packet's MQTT events
+        self.modbus = ModbusTracker()  # Modbus/TCP view; .events holds this packet's Modbus events
 
     def recently_fired(self, rule: str, src: str | None, within: float, now: float) -> bool:
         ts = self.fired.get((rule, src))
@@ -444,6 +457,8 @@ class ExternalConnectionDetector(Detector):
         client, server = rec.src_ip, rec.dst_ip
         if not ctx.inventory.is_local(client) or not ctx.inventory.is_external(server):
             return []
+        if ctx.policy.is_ot(client):
+            return []  # OT device reaching the internet is DET-015's (more severe) job
         prof = ctx.baseline.get(client)
         if prof is not None and server in prof.external_peers:
             return []
@@ -761,18 +776,261 @@ class MqttActivityDetector(Detector):
                             usual_subscriptions=sorted(prof.mqtt_subscribe) if prof else [])]
 
 
+# --------------------------------------------------------------------------- #
+# OT / ICS rules (Week 7). They are driven by the zone policy (ZonePolicy) and
+# the Modbus tracker, and stay silent unless an `ot:` section is configured.
+REMOTE_ACCESS_APPS = {"TELNET", "TELNET-ALT", "SSH", "RDP", "VNC", "ADB"}
+
+
+class OtNewAssetDetector(Detector):
+    """DET-010: a device appears in the OT zone, or starts answering Modbus.
+
+    OT networks are meant to be a fixed, documented set of assets, so a new
+    one is a strong signal. An asset declared in the policy is expected
+    (medium, first time only); an undeclared one is high.
+    """
+
+    name = "ot_new_asset"
+
+    def __init__(self, cfg: dict):
+        super().__init__(cfg)
+        self.seen_plcs: set[str] = set()
+
+    def on_packet(self, rec, ctx):
+        pol = ctx.policy
+        if not pol.enabled:
+            return []
+        alerts = []
+        dev = ctx.new_device
+        # A declared OT asset is expected (like an approved asset-register entry);
+        # only an undeclared OT device is worth an alert.
+        if dev is not None and pol.is_ot(dev.last_ip) and not pol.is_declared(dev.last_ip):
+            ip = dev.last_ip
+            if self._should_fire(("asset", ip), rec.ts):
+                alerts.append(Alert(
+                    rec.ts, self.name, "high",
+                    f"New OT asset detected: {ip} ({dev.vendor}) — not in the asset policy",
+                    src=ip, mitre="T1200 Hardware Additions / ICS T0848 Rogue Master",
+                    details={"ip": ip, "zone": "OT", "role": pol.role_of(ip, ctx.modbus.servers),
+                             "declared": False, "vendor": dev.vendor}))
+        # A device that begins serving Modbus is a PLC we may not have flagged yet.
+        for ev in ctx.modbus.events:
+            if ev.kind == "response" and ev.server not in self.seen_plcs:
+                self.seen_plcs.add(ev.server)
+                if not pol.is_declared(ev.server) and self._should_fire(("plc", ev.server), rec.ts):
+                    alerts.append(Alert(
+                        rec.ts, self.name, "high",
+                        f"New OT asset detected: {ev.server} answering Modbus/TCP (PLC) — not in the asset policy",
+                        src=ev.server, mitre="T1200 Hardware Additions / ICS T0848 Rogue Master",
+                        details={"ip": ev.server, "zone": pol.zone_of(ev.server) or "unknown",
+                                 "role": "plc", "protocol": "Modbus/TCP", "declared": False}))
+        return alerts
+
+
+class UnauthorizedModbusDetector(Detector):
+    """DET-011: a Modbus client that the policy does not allow to talk to a PLC.
+
+    Modbus has no authentication, so an allowlist of clients is the control.
+    An unapproved client reading registers is high; writing them (changing
+    the process) is critical. An approved reader that writes, when it is not
+    on the writers list, is high.
+    """
+
+    name = "unauthorized_modbus"
+
+    def on_packet(self, rec, ctx):
+        pol = ctx.policy
+        if not pol.enabled or not pol.modbus_clients:
+            return []
+        alerts = []
+        for ev in ctx.modbus.events:
+            if ev.kind != "request":
+                continue
+            plcs = ctx.modbus.servers | {ev.server}
+            if not pol.modbus_client_allowed(ev.client, plcs):
+                sev = "critical" if ev.write else "high"
+                verb = "wrote to" if ev.write else "read from"
+                # Separate cooldowns for reads and writes, so a critical write is
+                # still reported after an earlier read alert from the same client.
+                if self._should_fire(("client", ev.client, ev.server, ev.write), rec.ts):
+                    alerts.append(self._alert(rec, ev, pol, sev,
+                        f"Unauthorized Modbus client: {ev.client} {verb} PLC {ev.server} "
+                        f"(unit {ev.unit}, {ev.name})",
+                        "T1021 Remote Services / ICS T0855 Unauthorized Command Message"))
+            elif ev.write and not pol.modbus_writer_allowed(ev.client, plcs):
+                if self._should_fire(("write", ev.client, ev.server), rec.ts):
+                    alerts.append(self._alert(rec, ev, pol, "high",
+                        f"Unauthorized Modbus write: {ev.client} wrote PLC {ev.server} "
+                        f"(unit {ev.unit}, {ev.name}), but is read-only by policy",
+                        "ICS T0855 Unauthorized Command Message / T0836 Modify Parameter"))
+        return alerts
+
+    def _alert(self, rec, ev, pol, severity, title, mitre):
+        return Alert(rec.ts, self.name, severity, title, src=ev.client, dst=ev.server, mitre=mitre,
+                     details={"client_role": pol.role_of(ev.client, {ev.server}), "function": ev.name,
+                              "function_code": ev.func, "unit": ev.unit, "write": ev.write,
+                              "register": ev.address, "quantity": ev.quantity})
+
+
+class OtSegmentationDetector(Detector):
+    """DET-012: a host outside the OT zone opens a connection to an OT device
+    that the policy does not allow (IT -> OT, IoT -> OT, unknown -> PLC).
+
+    This is the network-segmentation (Purdue model) check: only listed
+    conversations may cross into the control network. External sources are
+    critical, internal (IT/IoT) ones high.
+    """
+
+    name = "ot_segmentation"
+
+    def on_packet(self, rec, ctx):
+        pol = ctx.policy
+        if not pol.enabled or not ctx.attempt:
+            return []
+        src, dst = rec.src_ip, rec.dst_ip
+        if not pol.is_ot(dst) or pol.zone_of(src) == "OT":
+            return []
+        if pol.allowed(src, dst, ctx.modbus.servers):
+            return []
+        if not self._should_fire((src, dst), rec.ts):
+            return []
+        src_zone = pol.zone_of(src) or ("external" if ctx.inventory.is_external(src) else "unmanaged")
+        severity = "critical" if src_zone == "external" else "high"
+        return [Alert(
+            rec.ts, self.name, severity,
+            f"Segmentation violation: {src_zone} host {src} connected to OT device {dst}:{rec.dport}",
+            src=src, dst=dst, mitre="T1021 Remote Services / ICS T0886 Remote Services",
+            details={"src_zone": src_zone, "src_role": pol.role_of(src, ctx.modbus.servers),
+                     "dst_role": pol.role_of(dst, ctx.modbus.servers), "dst_port": rec.dport,
+                     "app": rec.app or KNOWN_SERVICES.get(rec.port, "")})]
+
+
+class OtProtocolDetector(Detector):
+    """DET-013: an application protocol inside the OT zone that is not on the
+    expected list (e.g. Telnet, HTTP or MQTT reaching a PLC).
+
+    Remote-access protocols (Telnet, SSH, RDP, VNC, ADB) into OT are high;
+    anything else unexpected is medium.
+    """
+
+    name = "ot_protocol"
+
+    def on_packet(self, rec, ctx):
+        pol = ctx.policy
+        if not pol.enabled or not pol.expected_protocols:
+            return []
+        app = rec.app
+        if not app or app in ("ARP",) or app in pol.expected_protocols:
+            return []
+        ot_dst, ot_src = pol.is_ot(rec.dst_ip), pol.is_ot(rec.src_ip)
+        if not (ot_dst or ot_src):
+            return []
+        # Traffic leaving the OT zone for the internet is DET-015's job, not an
+        # "unexpected protocol inside OT".
+        if ctx.inventory.is_external(rec.src_ip) or ctx.inventory.is_external(rec.dst_ip):
+            return []
+        target = rec.dst_ip if ot_dst else rec.src_ip
+        if not self._should_fire((target, app), rec.ts):
+            return []
+        severity = "high" if app in REMOTE_ACCESS_APPS else "medium"
+        return [Alert(
+            rec.ts, self.name, severity,
+            f"Unexpected protocol in OT zone: {app} involving {target}"
+            + (f":{rec.dport}" if ot_dst and rec.dport else ""),
+            src=rec.src_ip, dst=rec.dst_ip, mitre="ICS T0869 Standard Application Layer Protocol",
+            details={"app": app, "ot_device": target, "expected": sorted(pol.expected_protocols),
+                     "remote_access": app in REMOTE_ACCESS_APPS})]
+
+
+class ModbusRateDetector(Detector):
+    """DET-014: a Modbus client sending far more requests than it did during
+    the baseline (a polling flood, or an enumeration of registers).
+
+    The threshold is relative to the client's own learned peak, with a floor,
+    like the connection-rate and MQTT-burst rules.
+    """
+
+    name = "modbus_rate"
+
+    def __init__(self, cfg: dict):
+        super().__init__(cfg)
+        self.window = float(cfg.get("window_s", 60))
+        self.floor = int(cfg.get("min_requests", 120))
+        self.factor = float(cfg.get("peak_factor", 5.0))
+        self.recent: dict[str, deque] = defaultdict(deque)
+
+    def on_packet(self, rec, ctx):
+        alerts = []
+        for ev in ctx.modbus.events:
+            if ev.kind != "request":
+                continue
+            dq = self.recent[ev.client]
+            dq.append(rec.ts)
+            while dq and rec.ts - dq[0] > self.window:
+                dq.popleft()
+            count = len(dq)
+            if ctx.learning:
+                ctx.baseline.observe_modbus_rate(ev.client, count)
+                continue
+            prof = ctx.baseline.get(ev.client)
+            peak = prof.peak_modbus_requests if prof else 0
+            threshold = max(self.floor, math.ceil(self.factor * peak))
+            if count < threshold or not self._should_fire((ev.client,), rec.ts):
+                continue
+            alerts.append(Alert(
+                rec.ts, self.name, "medium",
+                f"Abnormal Modbus request rate: {ev.client} sent {count} requests to {ev.server} "
+                f"in {self.window:g}s (baseline peak {peak})",
+                src=ev.client, dst=ev.server,
+                mitre="ICS T0801 Monitor Process State / T0814 Denial of Service",
+                details={"requests": count, "window_s": self.window, "baseline_peak": peak,
+                         "threshold": threshold, "server": ev.server}))
+        return alerts
+
+
+class OtExternalDetector(Detector):
+    """DET-015: an OT-zone device opens a connection to the internet.
+
+    A PLC or engineering workstation reaching the internet is never expected
+    on a segmented control network, and is how OT malware exfiltrates or
+    reaches a C2 server.
+    """
+
+    name = "ot_external"
+
+    def on_packet(self, rec, ctx):
+        pol = ctx.policy
+        if not pol.enabled or not ctx.attempt:
+            return []
+        src, dst = rec.src_ip, rec.dst_ip
+        if not pol.is_ot(src) or not ctx.inventory.is_external(dst):
+            return []
+        if not self._should_fire((src, dst), rec.ts):
+            return []
+        role = pol.role_of(src, ctx.modbus.servers)
+        severity = "critical" if role == "plc" else "high"
+        return [Alert(
+            rec.ts, self.name, severity,
+            f"OT device communicating externally: {role} {src} -> {dst}:{rec.dport}",
+            src=src, dst=dst, mitre="T1071 Application Layer Protocol / ICS T0883 Internet Accessible Device",
+            details={"src_role": role, "destination": dst, "dst_port": rec.dport,
+                     "app": rec.app or KNOWN_SERVICES.get(rec.port, "")})]
+
+
 DETECTORS = {
     cls.name: cls
     for cls in (NewDeviceDetector, PortScanDetector, ConnectionRateDetector, SuspiciousPortDetector,
                 ExternalConnectionDetector, TrafficSpikeDetector, FailedConnectionDetector,
-                DeviceChangeDetector, MqttActivityDetector)
+                DeviceChangeDetector, MqttActivityDetector,
+                OtNewAssetDetector, UnauthorizedModbusDetector, OtSegmentationDetector,
+                OtProtocolDetector, ModbusRateDetector, OtExternalDetector)
 }
 
 
 class DetectionEngine:
     def __init__(self, config: dict, inventory: Inventory, assets: AssetRegister | None = None,
-                 baseline: Baseline | None = None):
-        self.ctx = Context(inventory, assets, baseline)
+                 baseline: Baseline | None = None, policy: ZonePolicy | None = None):
+        self.ctx = Context(inventory, assets, baseline, policy)
         self.detectors: list[Detector] = []
         for name, cls in DETECTORS.items():
             cfg = config.get(name, {})
@@ -797,6 +1055,9 @@ class DetectionEngine:
             if ctx.learning and ev.kind in ("connect", "publish", "subscribe"):
                 client_id = "" if ev.client.endswith(")") else ev.client
                 ctx.baseline.observe_mqtt(ev.kind, ev.ip, client_id, ev.topic)
+        for ev in ctx.modbus.update(rec):
+            if ctx.learning and ev.kind == "request":
+                ctx.baseline.observe_modbus(ev.client, ev.server, ev.name, ev.write)
         alerts = []
         for det in self.detectors:
             found = det.on_packet(rec, ctx)

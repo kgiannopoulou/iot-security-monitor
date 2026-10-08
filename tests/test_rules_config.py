@@ -19,7 +19,8 @@ from iotmon.models import RULES, register_rules
 from iotmon.pipeline import Monitor
 
 ROOT = Path(__file__).resolve().parent.parent
-CAPTURES = [ROOT / "samples" / "iot-lab.pcap", *sorted((ROOT / "samples" / "scenarios").glob("*.pcap"))]
+CAPTURES = [ROOT / "samples" / "iot-lab.pcap", ROOT / "samples" / "ot-lab.pcap",
+            *sorted((ROOT / "samples" / "scenarios").glob("*.pcap"))]
 TECHNIQUE = re.compile(r"T\d{4}(?:\.\d{3})?")
 
 
@@ -36,7 +37,8 @@ def alerts():
 def test_every_detector_has_exactly_one_rule():
     rules = load_rules()
     assert sorted(r["detector"] for r in rules) == sorted(DETECTORS)
-    assert [r["id"] for r in rules] == [f"DET-{i:03d}" for i in range(1, 10)]
+    assert [r["id"] for r in rules] == [f"DET-{i:03d}" for i in range(1, len(rules) + 1)]
+    assert len(rules) == len(DETECTORS) == 15
 
 
 def test_alerts_match_the_rule_file(alerts):
@@ -49,7 +51,8 @@ def test_alerts_match_the_rule_file(alerts):
         assert a.severity in rule["severities"], (a.rule, a.severity)
         declared = {t for entry in rule["attack"] for t in TECHNIQUE.findall(entry)}
         assert set(TECHNIQUE.findall(a.mitre)) <= declared, (a.rule, a.mitre)
-    assert len(fired) >= 8  # every rule except DET-008, which has its own live and unit tests
+    # every rule except DET-008 (own tests), across the IoT and OT captures
+    assert len(fired) >= 14, sorted(fired)
 
 
 def test_settings_reach_the_detectors():
@@ -57,7 +60,7 @@ def test_settings_reach_the_detectors():
     assert cfg["detections"]["port_scan"] == {"enabled": True, "window_s": 60, "vertical_threshold": 15,
                                               "horizontal_threshold": 8, "arp_threshold": 12, "cooldown_s": 300}
     assert cfg["detections"]["suspicious_port"]["ports"][6667] == "critical"
-    assert cfg["network"]["lab_networks"] == ["192.168.1.0/24", "172.28.0.0/24"]
+    assert cfg["network"]["lab_networks"] == ["192.168.1.0/24", "172.28.0.0/24", "192.168.10.0/24"]
 
 
 def test_site_config_overrides_only_its_keys(tmp_path):

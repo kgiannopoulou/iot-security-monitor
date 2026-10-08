@@ -332,6 +332,76 @@ detection is the only control: in the lab every device shares one account.
 
 ---
 
+# OT / ICS rules (Week 7)
+
+These six rules watch an industrial control network. They are driven by the
+**zone policy** ([`config.yaml`](../config.yaml) `ot:` section): devices are
+assigned to zones (OT / IT) by IP, given a role (plc, hmi,
+engineering_workstation), and an allowlist says which roles may initiate into
+OT. With no `ot:` section configured, none of them fire. See
+[Week 7](07-ot-ics-expansion.md) for the full write-up.
+
+## DET-010 `ot_new_asset`: new OT asset detected
+
+Fires when a device first appears in the OT zone, or first answers Modbus/TCP
+(making it a PLC), and is **not declared** in the policy's asset list. A
+declared asset is expected and stays silent, exactly like an approved entry in
+the IoT asset register. **Severity** high. **Why:** OT networks are a fixed,
+documented set of assets; an undeclared one is a rogue device or an
+un-inventoried PLC. **False positives:** a genuinely new but legitimate asset —
+declare it. **ATT&CK:** T1200 / ICS T0848 Rogue Master.
+
+## DET-011 `unauthorized_modbus`: unauthorized Modbus client
+
+Modbus/TCP has no authentication, so the control is an **allowlist** of
+clients. Fires when a client not on `modbus.allowed_clients` sends a Modbus
+request to a PLC, or when an allowed reader writes without being on the
+`writers` list. **Severity:** reading a PLC is **high** (reconnaissance);
+writing it is **critical** (it changes the physical process). **Why:** the
+read/write distinction is the whole point of decoding Modbus function codes
+rather than treating it as "TCP to port 502". **ATT&CK:** T1021 / ICS T0855
+Unauthorized Command Message, T0836 Modify Parameter.
+
+## DET-012 `ot_segmentation`: IT host communicating with an OT device
+
+Fires when a host **outside** the OT zone opens a connection into it that the
+policy does not allow (an office PC or IoT camera reaching a PLC). This is the
+network-segmentation (Purdue model) check, independent of protocol.
+**Severity** high, or critical when the source is on the internet. **Why:**
+crossing from IT into OT is the classic path of an OT intrusion. **False
+positives:** a legitimate IT→OT data flow (a historian) — add it to the
+allowlist. **ATT&CK:** T1021 / ICS T0886 Remote Services.
+
+## DET-013 `ot_protocol`: unexpected protocol in the OT network
+
+Fires on an application protocol inside the OT zone that is not on
+`expected_protocols` (e.g. Telnet, HTTP or MQTT reaching a PLC). Remote-access
+protocols (Telnet, SSH, RDP, VNC, ADB) are **high**, anything else **medium**.
+Traffic leaving OT for the internet is left to DET-015. **Why:** a control
+network should speak a small, known set of protocols; a management or
+remote-access protocol appearing is either misconfiguration or an intruder.
+**ATT&CK:** ICS T0869 Standard Application Layer Protocol.
+
+## DET-014 `modbus_rate`: abnormal Modbus request rate
+
+Fires when a Modbus client sends far more requests per window than it did
+during the baseline — `max(min_requests, peak_factor × learned peak)` — a
+polling flood or a sweep of the register map. **Severity** medium. **Why:**
+industrial polling is steady and periodic; a sudden surge is a denial-of-
+service attempt on the PLC or an enumeration of its registers. Same shape as
+the IoT connection-rate (DET-003) and MQTT-burst (DET-009) rules. **ATT&CK:**
+ICS T0801 Monitor Process State, T0814 Denial of Service.
+
+## DET-015 `ot_external`: OT device communicating externally
+
+Fires when a device in the OT zone opens a connection to the internet. A PLC
+is **critical**, any other OT device **high**. **Why:** a segmented control
+network should never reach the internet; a PLC that does is exfiltrating or
+reaching a C2 server. This takes priority over the IoT DET-005, which skips
+OT-zone sources. **ATT&CK:** T1071 / ICS T0883 Internet Accessible Device.
+
+---
+
 ## Validating the rules
 
 | Evidence | How |
@@ -339,6 +409,7 @@ detection is the only control: in the lab every device shares one account.
 | Unit tests per rule, positive *and* negative cases | `pytest tests/test_detections.py` |
 | One controlled scenario per core rule, three for MQTT, plus a near miss, each triggering exactly its rules | `python tools/run_scenarios.py`, `pytest tests/test_scenarios.py` |
 | MQTT tracker and every DET-009 check, positive and negative | `pytest tests/test_mqtt.py` |
+| Modbus decoding, zones and policy, and the six OT rules on `samples/ot-lab.pcap`; live 6/6 in the OT lab | `pytest tests/test_ot.py`, `python tools/ot_lab_scenarios.py` |
 | Full kill chain on the sample capture, exact alert list | `pytest tests/test_end_to_end.py` |
 | Five minutes of normal traffic raise zero alerts | `test_baseline_is_quiet` |
 | Live, against real containers | `python tools/lab_scenarios.py` ([lab guide](lab-setup.md#detection-scenarios-week-3)) |

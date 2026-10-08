@@ -13,6 +13,7 @@ from .display import Printer
 from .flows import FlowTable
 from .inventory import Inventory
 from .models import Alert, PacketRecord
+from .policy import ZonePolicy
 from .storage import Storage
 
 
@@ -33,8 +34,10 @@ class Monitor:
                                 window=float(config["detections"].get("connection_rate", {}).get("window_s", 60)))
         self.baseline = baseline
         self._baseline_saved = baseline.frozen  # a loaded baseline is never rewritten
+        self.policy = ZonePolicy(config.get("ot"))
+        self.inventory.policy = self.policy  # so devices report their OT zone and role
         self.engine = DetectionEngine(config["detections"], self.inventory, None if self.bootstrap else assets,
-                                      baseline)
+                                      baseline, self.policy)
         self.assets = assets
         self.new_asset_status = new_asset_status
         self.added_assets: list[str] = []
@@ -71,6 +74,7 @@ class Monitor:
             if time.monotonic() - self._last_commit > 2:
                 self.storage.devices(list(self.inventory.devices.values()))
                 self.storage.mqtt(self.engine.ctx.mqtt)
+                self.storage.modbus(self.engine.ctx.modbus)
                 self.storage.commit()
                 self._last_commit = time.monotonic()
         if self.assets is not None and time.monotonic() - self._last_asset_save > 30:
@@ -117,6 +121,7 @@ class Monitor:
             self.storage.flows(self.flows.drain())
             self.storage.devices(list(self.inventory.devices.values()))
             self.storage.mqtt(self.engine.ctx.mqtt)
+            self.storage.modbus(self.engine.ctx.modbus)
             self.storage.close()
             self.storage = None
 

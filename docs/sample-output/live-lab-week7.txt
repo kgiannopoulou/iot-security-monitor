@@ -1,0 +1,49 @@
+# Live OT Docker lab (lab/ot/), 2026-10-08. python tools/ot_lab_scenarios.py -> 6/6 passed.
+
+$ docker compose exec dashboard python -m iotmon status --db /data/iotmon.db
+IOT SECURITY MONITOR                                                               posture: CRITICAL
+────────────────────────────────────────────────────────────────────────────────────────────────────
+Devices monitored                      6   3 not approved
+Packets analyzed                     915   73.3 kB
+Security alerts                       11   11 active
+High-severity alerts                   8   8 active
+Traffic window                             2026-10-08 11:20 - 11:24 UTC
+Last run                              #2   live otlab0 (running, 908 packets)
+
+Why CRITICAL
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  - 2 active critical alerts: DET-011 unauthorized_modbus, DET-015 ot_external
+  - 6 active high alerts: DET-004 suspicious_port, DET-010 ot_new_asset, DET-011
+    unauthorized_modbus, DET-012 ot_segmentation, DET-013 ot_protocol
+  - 3 active medium alerts: DET-001 new_device, DET-014 modbus_rate
+  - 3 devices not approved in the asset register: 192.168.10.130, 192.168.10.66, 192.168.10.1
+  - Most affected device: 192.168.10.130 (HP), 7 active alerts
+
+Devices needing attention
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  IP              VENDOR                     ALERTS  WORST     RULES
+  192.168.10.130  HP                              7  CRITICAL  DET-001, DET-004, DET-011, DET-012...
+  192.168.10.20   Siemens                         8  CRITICAL  DET-004, DET-011, DET-012, DET-013...
+  192.168.10.66   Raspberry Pi Foundation         3  HIGH      DET-001, DET-010, DET-011
+
+Recent Alerts
+────────────────────────────────────────────────────────────────────────────────────────────────────
+    11 11:23:00  CRITICAL DET-015  OT device communicating externally: plc 192.168.10.20 -> 198.5...
+    10 11:22:49  HIGH     DET-011  Unauthorized Modbus client: 192.168.10.66 read from PLC 192.16...
+     9 11:22:49  HIGH     DET-010  New OT asset detected: 192.168.10.66 (Raspberry Pi Foundation)...
+     8 11:22:49  MEDIUM   DET-001  New IoT device detected: 192.168.10.66 (Raspberry Pi Foundation)
+     7 11:22:40  HIGH     DET-004  TELNET session 192.168.10.130 -> 192.168.10.20:23
+     6 11:22:40  HIGH     DET-013  Unexpected protocol in OT zone: TELNET involving 192.168.10.20:23
+     5 11:22:32  MEDIUM   DET-014  Abnormal Modbus request rate: 192.168.10.130 sent 120 requests...
+     4 11:22:24  CRITICAL DET-011  Unauthorized Modbus client: 192.168.10.130 wrote to PLC 192.16...
+     3 11:22:13  HIGH     DET-011  Unauthorized Modbus client: 192.168.10.130 read from PLC 192.1...
+     2 11:22:13  HIGH     DET-012  Segmentation violation: IT host 192.168.10.130 connected to OT...
+     1 11:22:13  MEDIUM   DET-001  New IoT device detected: 192.168.10.130 (HP)
+
+$ docker compose exec dashboard python -m iotmon modbus --db /data/iotmon.db
+MODBUS/TCP (OT)  (PLC servers: 192.168.10.20)
+CLIENT          -> PLC               REQ   WR  EXC  UNITS    READ REG     WRITE REG  FUNCTIONS
+192.168.10.10   -> 192.168.10.20     103    6    0  1        0-9          40         Read Holding Registers, Write Single Register
+192.168.10.11   -> 192.168.10.20      96    0    0  1        0-9          -          Read Holding Registers
+192.168.10.130  -> 192.168.10.20     121    1    0  1        0-119        40         Read Holding Registers, Write Single Register
+192.168.10.66   -> 192.168.10.20       5    0    0  1        0-9          -          Read Holding Registers

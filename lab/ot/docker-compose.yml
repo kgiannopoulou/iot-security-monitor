@@ -1,0 +1,73 @@
+# Simulated OT (industrial) lab: a Modbus/TCP PLC, an engineering workstation
+# and an HMI on one control network, an office PC in the IT half, plus the
+# monitor sniffing the bridge and the dashboard reading its database.
+#
+#   cd lab/ot && docker compose up -d --build
+#   # wait ~2 min for data/ot-lab/baseline.json, then:
+#   python tools/ot_lab_scenarios.py
+#   dashboard: http://localhost:8081
+
+name: ot-lab
+
+networks:
+  otlab:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: otlab0   # fixed host-side name for the monitor to sniff
+    ipam:
+      config:
+        - subnet: 192.168.10.0/24
+          gateway: 192.168.10.1
+
+x-device: &device
+  build: ../../simulator
+  restart: unless-stopped
+
+services:
+  plc:
+    <<: *device
+    environment: { ROLE: plc }
+    command: ["python", "/app/ot_devices.py"]
+    networks: { otlab: { ipv4_address: 192.168.10.20 } }
+    mac_address: "00:1b:1b:00:00:20"            # Siemens OUI
+
+  ews:
+    <<: *device
+    environment: { ROLE: ews, PLC_IP: 192.168.10.20 }
+    command: ["python", "/app/ot_devices.py"]
+    depends_on: [plc]
+    networks: { otlab: { ipv4_address: 192.168.10.10 } }
+    mac_address: "3c:52:82:00:00:10"            # HP OUI (an engineering laptop)
+
+  hmi:
+    <<: *device
+    environment: { ROLE: hmi, PLC_IP: 192.168.10.20 }
+    command: ["python", "/app/ot_devices.py"]
+    depends_on: [plc]
+    networks: { otlab: { ipv4_address: 192.168.10.11 } }
+    mac_address: "00:1b:1b:00:00:11"
+
+  # The office PC sits in the IT half of the bridge. It does nothing on its
+  # own; tools/ot_lab_scenarios.py runs the attacks from inside it.
+  office:
+    <<: *device
+    entrypoint: ["sleep", "infinity"]
+    networks: { otlab: { ipv4_address: 192.168.10.130 } }
+    mac_address: "3c:52:82:00:00:50"
+
+  monitor:
+    build: ../..
+    restart: unless-stopped
+    network_mode: host                          # sees the otlab0 bridge (SPAN-style)
+    cap_add: [NET_RAW, NET_ADMIN]
+    command: ["live", "-i", "otlab0", "-q", "--append", "--db", "/data/iotmon.db",
+              "--inventory", "/data/inventory.json", "--baseline", "/data/baseline.json",
+              "--config", "/config/monitor.yaml"]
+    volumes: ["../../data/ot-lab:/data", "./monitor.yaml:/config/monitor.yaml:ro"]
+
+  dashboard:
+    build: ../..
+    restart: unless-stopped
+    command: ["dashboard", "--host", "0.0.0.0", "--db", "/data/iotmon.db", "--read-only"]
+    ports: ["127.0.0.1:8081:8080"]
+    volumes: ["../../data/ot-lab:/data"]

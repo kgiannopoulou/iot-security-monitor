@@ -33,8 +33,10 @@ Data flow in more detail (all modules are in `src/iotmon/`):
 | `inventory.py` | Passive asset inventory: MAC-keyed devices, OUI vendor lookup, role inference from offered services and MQTT behaviour, connection counts, MAC/IP binding changes. |
 | `assets.py` | Persistent asset register (`data/inventory.json`): known devices keyed by MAC with status approved / pending, merged after each run (replay-safe), saved every 30 s during live capture. See [Week 2](02-device-inventory.md). |
 | `baseline.py` | Behavioural baseline (`data/baseline.json`): per device, the ports it uses and serves, its internet peers and its peak connection rate. Learned during the learning period or from a trusted capture, then frozen. See [Week 3](03-detection-engine.md). |
+| `modbus.py` | Modbus/TCP decoding and tracker: per client→PLC conversation, function codes, read vs write, register ranges. Feeds the OT rules. See [Week 7](07-ot-ics-expansion.md). |
+| `policy.py` | OT zones (OT/IT, by IP) and the communication policy (which roles may talk to a PLC, who may read/write Modbus, which protocols belong in OT). See [Week 7](07-ot-ics-expansion.md). |
 | `mqtt.py` | MQTT tracker: maps MQTT packets to client IDs and brokers, keeps per-client and per-topic statistics (messages, last value, publishers, subscriptions) and emits connect/publish/subscribe events for DET-009. See [Week 4](04-iot-protocols.md). |
-| `detections.py` | `DetectionEngine` plus nine `Detector` subclasses (DET-001 to DET-009). The engine tells each detector whether the packet opened a connection and whether the baseline is still learning, and remembers which rules fired for which source. See [detection-rules.md](detection-rules.md). |
+| `detections.py` | `DetectionEngine` plus fifteen `Detector` subclasses (DET-001..009 IoT, DET-010..015 OT/ICS). The engine tells each detector whether the packet opened a connection and whether the baseline is still learning, and remembers which rules fired for which source. See [detection-rules.md](detection-rules.md). |
 | `storage.py` | SQLite in WAL mode (monitor and dashboard share the file), JSONL alerts for SIEM ingestion, optional CSV. Writes are batched and committed every 2 s, together with the run's progress. Versioned schema with in-place upgrades, alert triage (`set_alert_status`) and retention (`prune`). |
 | `state.py` | Security state from the database: posture (CRITICAL / AT RISK / WATCH / OK) with reasons, devices ranked by active alerts, filtered alert queries, the `iotmon status` text view and CSV export. The CLI and the dashboard both use it, so they always agree. See [Week 5](05-logging-dashboard.md). |
 | `pipeline.py` | `Monitor`: wires the stages together and flushes state on exit. |
@@ -70,11 +72,12 @@ ranges.
 | Table | Contents |
 |---|---|
 | `alerts` | ts, rule, rule_id (DET-xxx), severity, title, src, dst, mitre, details (JSON), run_id, status (open / acknowledged / resolved / false_positive), note, updated |
-| `devices` | key (MAC), ips, vendor, name, role, first/last seen, packet/byte counters, protocols, services |
+| `devices` | key (MAC), ips, vendor, name, role, counters, protocols, services, zone, device_type, risk_score |
 | `flows` | 5-tuple, app, first/last seen, duration, packets, bytes per direction, state |
 | `traffic` | per minute × application protocol: packets, bytes (feeds the chart) |
 | `mqtt_clients` | client ID, host, broker, username, connects, refused, messages, topics published, subscriptions |
 | `mqtt_topics` | topic, messages, last value, publishers, first/last seen |
+| `modbus_conversations` | client, PLC server, requests, writes, exceptions, function codes, units, register ranges (Week 7) |
 | `runs` | mode (read / live), source, version, started / updated / ended (wall clock), first / last packet, packets, alerts |
 
 `PRAGMA user_version` holds the schema version (5). Older databases get

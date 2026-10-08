@@ -25,3 +25,5 @@ jobs:
           iotmon read samples/iot-lab.pcap -q --db /tmp/iotmon.db
           iotmon status --db /tmp/iotmon.db
           iotmon rules
+          iotmon read samples/ot-lab.pcap -q --db /tmp/ot.db
+          iotmon modbus --db /tmp/ot.db

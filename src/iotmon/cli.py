@@ -9,6 +9,7 @@
     python -m iotmon baseline learn baseline.pcap     # learn normal behaviour per device
     python -m iotmon baseline show                    # what each device normally does
     python -m iotmon mqtt                             # MQTT clients and topics from the database
+    python -m iotmon modbus                           # Modbus/TCP conversations (OT) from the database
     python -m iotmon status                           # security posture at a glance
     python -m iotmon alerts --severity high           # query the alert log
     python -m iotmon alerts ack 3 4 --note "..."      # triage alerts
@@ -160,10 +161,13 @@ def cmd_report(args) -> int:
         return datetime.fromtimestamp(ts, tz=tz).strftime("%Y-%m-%d %H:%M:%S")
 
     print("DEVICES")
-    print(f"  {'IP':<15} {'MAC':<17} {'VENDOR':<28} {'ROLE':<30} {'SERVICES':<12} {'CONN':>5}  NAME")
-    for d in db.execute("SELECT * FROM devices ORDER BY first_seen"):
-        print(f"  {d['ips']:<15} {d['mac'] or '-':<17} {d['vendor'][:28]:<28} {d['role'][:30]:<30} "
-              f"{d['services'] or '-':<12} {d['connections'] or 0:>5}  {d['name'] or ''}")
+    print(f"  {'IP':<15} {'ZONE':<5} {'TYPE':<14} {'RISK':>4} {'VENDOR':<24} {'ROLE':<28}  NAME")
+    for d in db.execute("SELECT * FROM devices ORDER BY COALESCE(risk_score, 0) DESC, first_seen"):
+        zone = (d["zone"] if "zone" in d.keys() else "") or "-"
+        dtype = (d["device_type"] if "device_type" in d.keys() else "") or "-"
+        risk = d["risk_score"] if "risk_score" in d.keys() and d["risk_score"] is not None else ""
+        print(f"  {d['ips']:<15} {zone:<5} {dtype[:14]:<14} {str(risk):>4} {d['vendor'][:24]:<24} "
+              f"{d['role'][:28]:<28}  {d['name'] or ''}")
 
     print("\nTOP FLOWS (by bytes)")
     for f in db.execute("SELECT * FROM flows ORDER BY bytes DESC LIMIT 10"):
@@ -171,6 +175,7 @@ def cmd_report(args) -> int:
               f"  {f['protocol']}/{f['app'] or '?':<8} {f['packets']:>6} pkts {f['bytes']:>9} B  {f['state']}")
 
     _print_mqtt(db, indent="  ", heading="\nMQTT CLIENTS")
+    _print_modbus(db, indent="  ", heading="\nMODBUS/TCP (OT)")
 
     print("\nALERTS")
     rows = db.execute("SELECT * FROM alerts ORDER BY ts").fetchall()
@@ -211,6 +216,36 @@ def cmd_mqtt(args) -> int:
     db.row_factory = sqlite3.Row
     if not _print_mqtt(db):
         print("no MQTT traffic in this database", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _print_modbus(db, indent: str = "", heading: str = "MODBUS/TCP (OT)") -> bool:
+    try:
+        convs = db.execute("SELECT * FROM modbus_conversations ORDER BY server, client").fetchall()
+    except sqlite3.OperationalError:  # database from before Week 7
+        return False
+    if not convs:
+        return False
+    plcs = sorted({c["server"] for c in convs})
+    print(f"{heading}  (PLC servers: {', '.join(plcs)})")
+    print(f"{indent}{'CLIENT':<15} -> {'PLC':<15} {'REQ':>5} {'WR':>4} {'EXC':>4}  {'UNITS':<8} "
+          f"{'READ REG':<12} {'WRITE REG':<10} FUNCTIONS")
+    for c in convs:
+        print(f"{indent}{c['client']:<15} -> {c['server']:<15} {c['requests']:>5} {c['writes']:>4} "
+              f"{c['exceptions']:>4}  {c['units'] or '-':<8} {c['read_registers'] or '-':<12} "
+              f"{c['write_registers'] or '-':<10} {c['functions'].replace(',', ', ')}")
+    return True
+
+
+def cmd_modbus(args) -> int:
+    if not Path(args.db).exists():
+        print(f"error: no database at {args.db} - run 'read' or 'live' first", file=sys.stderr)
+        return 1
+    db = sqlite3.connect(args.db)
+    db.row_factory = sqlite3.Row
+    if not _print_modbus(db):
+        print("no Modbus/TCP traffic in this database", file=sys.stderr)
         return 1
     return 0
 
@@ -538,6 +573,10 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("mqtt", help="print MQTT clients and topics from the database")
     p.add_argument("--db", default=DEFAULT_DB)
     p.set_defaults(func=cmd_mqtt)
+
+    p = sub.add_parser("modbus", help="print Modbus/TCP conversations (OT) from the database")
+    p.add_argument("--db", default=DEFAULT_DB)
+    p.set_defaults(func=cmd_modbus)
 
     p = sub.add_parser("status", help="security posture: headline numbers, why, affected devices, recent alerts")
     p.add_argument("--db", default=DEFAULT_DB)

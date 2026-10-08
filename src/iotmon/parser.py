@@ -21,6 +21,7 @@ from scapy.layers.ntp import NTP
 from scapy.packet import Packet
 
 from .models import KNOWN_SERVICES, PacketRecord, service_port
+from .modbus import MODBUS_PORT, parse_modbus
 
 ICMP_TYPES = {0: "echo-reply", 3: "dest-unreachable", 8: "echo-request", 11: "time-exceeded"}
 MQTT_CONNACK_CODES = {
@@ -151,6 +152,24 @@ def _parse_application(pkt: Packet, rec: PacketRecord) -> None:
                 parts.append(ptype)
             layer = body.payload if body is not None else None
         rec.info = "; ".join(parts)
+        return
+
+    if rec.port == MODBUS_PORT and rec.protocol == "TCP":
+        payload = bytes(pkt[TCP].payload)
+        if payload:
+            pdus = parse_modbus(payload, to_server=rec.dport == MODBUS_PORT)
+            if pdus:
+                rec.app = "MODBUS"
+                rec.meta["modbus"] = pdus
+                first = pdus[0]
+                if first["exception"]:
+                    rec.info = f"unit {first['unit']} {first['name']} EXCEPTION {first.get('exception_code', '')}".strip()
+                else:
+                    where = ""
+                    if "address" in first:
+                        where = f" @{first['address']}" + (f"x{first['quantity']}" if first.get("quantity", 1) > 1 else "")
+                    rec.info = f"unit {first['unit']} {first['name']}{where}" + (
+                        f" (+{len(pdus) - 1} more)" if len(pdus) > 1 else "")
         return
 
     if NTP in pkt and rec.port == 123:

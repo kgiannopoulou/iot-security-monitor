@@ -6,10 +6,11 @@
 
 A passive network security monitor for IoT and OT networks, written in
 Python. It watches traffic on a network segment, builds an inventory of the
-devices on it, learns how each device normally behaves, decodes the IoT
-protocol itself (MQTT), and raises alerts when something changes: a rogue
-device, a port scan, a sensor that suddenly talks to the internet, a
-spoofed telemetry value. The alerts are logged to SQLite, triaged by an
+devices on it, learns how each device normally behaves, decodes the
+protocols that run on these networks — MQTT for IoT and Modbus/TCP for
+industrial (OT) control — and raises alerts when something changes: a rogue
+device, a port scan, a sensor that talks to the internet, a spoofed telemetry
+value, an unauthorized write to a PLC, an IT host reaching into control. The alerts are logged to SQLite, triaged by an
 analyst, and summarised as one security posture on a web and terminal
 dashboard.
 
@@ -25,6 +26,7 @@ camera starts calling a botnet C2 server (CRITICAL).*
 [Architecture](#2-architecture) ·
 [Implementation](#3-implementation) ·
 [Detections](#4-detections) ·
+[OT / ICS](#ot--ics-industrial-security) ·
 [Demonstration](#5-demonstration) ·
 [Results](#6-results) ·
 [Limitations](#7-limitations) ·
@@ -144,6 +146,37 @@ DET-009  mqtt_activity        yes low, medium, high      Abnormal MQTT activity
 None of them is "if port == X then hacker". Each rule's logic, threshold
 reasoning, false positives and blind spots: [docs/detection-rules.md](docs/detection-rules.md).
 
+### OT / ICS (industrial security)
+
+Six more rules understand an industrial control network (Week 7). They are
+driven by a small **segmentation policy** — which zones and roles may talk to
+a PLC — and by decoding **Modbus/TCP**, so the monitor tells a legitimate read
+from an unauthorized write to the process.
+
+| ID | Rule | Fires on |
+|---|---|---|
+| DET-010 | `ot_new_asset` | a device appears in the OT zone, or starts answering Modbus, and is undeclared |
+| DET-011 | `unauthorized_modbus` | a Modbus client the policy forbids — reading is high, **writing is critical** |
+| DET-012 | `ot_segmentation` | a host outside OT opens a forbidden connection into it (IT→PLC) |
+| DET-013 | `ot_protocol` | an unexpected protocol inside OT (Telnet/HTTP/MQTT to a PLC) |
+| DET-014 | `modbus_rate` | far more Modbus requests than the baseline (a flood or register scan) |
+| DET-015 | `ot_external` | an OT device connects to the internet (PLC→C2 is critical) |
+
+```
+$ iotmon read samples/ot-lab.pcap -q
+10:35:05  [HIGH]     DET-012 Segmentation violation: IT host 192.168.1.50 connected to OT device 192.168.10.20:502
+10:35:20  [CRITICAL] DET-011 Unauthorized Modbus client: 192.168.1.50 wrote to PLC 192.168.10.20 (Write Single Register)
+10:36:35  [CRITICAL] DET-015 OT device communicating externally: plc 192.168.10.20 -> 198.51.100.23:443
+```
+
+The zones and policy are a few lines of [`config.yaml`](config.yaml); with no
+`ot:` section the OT rules stay silent, so IoT-only use is unaffected. There
+is a deterministic [`samples/ot-lab.pcap`](samples) and a full Docker OT lab
+([`lab/ot/`](lab/ot)) with a simulated Modbus PLC, engineering workstation and
+HMI. Details: **[Week 7: OT/ICS expansion](docs/07-ot-ics-expansion.md)**.
+
+![The OT dashboard: Modbus conversations, zones and asset risk](screenshots/dashboard-ot.png)
+
 ## 5. Demonstration
 
 ### Quick start (no Docker, no admin rights)
@@ -251,9 +284,10 @@ no attacker image and nothing leaves the lab. Lab guide: [docs/lab-setup.md](doc
 | Intrusion in the sample capture | Every stage detected: **12 alerts from 8 of the 9 rules**, from the rogue device's first packet to the C2 traffic (DET-008, ARP spoofing, has its own unit and live tests) |
 | False positives on normal traffic | **0 alerts** during the 5-minute baseline of the sample capture (a test) |
 | Recorded test scenarios | **10/10** fire exactly their expected rules, including a near miss at 80% of every threshold that must stay silent |
-| Live Docker lab | **8/8** scenarios pass, re-run after each week's changes (Weeks 3-6) |
+| Live Docker lab (IoT) | **8/8** scenarios pass, re-run after each week's changes (Weeks 3-6) |
+| Live Docker lab (OT) | **6/6** Modbus/OT scenarios pass in the industrial lab ([`lab/ot/`](lab/ot)) |
 | Throughput | ≈ 4,200 packets/s parsing and ≈ 6,500 packets/s detection on a laptop (Python 3.14, scapy 2.8): ample for an IoT segment, not for a data-centre link |
-| Tests | **106 pytest tests** (parsing, every rule positive and negative, scenarios, end to end, storage, posture, dashboard API, rule-file consistency), run in CI on Python 3.11-3.13 |
+| Tests | **120 pytest tests** (parsing, every rule positive and negative, scenarios, end to end, storage, posture, dashboard API, rule-file consistency), run in CI on Python 3.11-3.13 |
 | False positives found live, and fixed | 3 (see below): each led to a config change, a code fix with a regression test, or a documented, triageable known issue |
 
 The live lab found things the synthetic tests couldn't: the Docker gateway
@@ -344,17 +378,18 @@ iot-security-monitor/
 │   ├── capture.py, parser.py    packet capture and protocol decoding  (the "monitor")
 │   ├── inventory.py, assets.py  device tracking and the asset register ("device tracker")
 │   ├── baseline.py, mqtt.py     per-device behaviour, MQTT clients and topics
+│   ├── modbus.py, policy.py     Modbus/TCP tracking; OT zones + segmentation policy
 │   ├── detections.py            the nine detectors                      ("detector")
 │   ├── models.py, state.py      alert records, posture and device risk  ("alerts")
 │   ├── storage.py               SQLite schema, triage, retention        ("database")
 │   ├── dashboard/               Flask API + web page
 │   ├── pipeline.py              wires the stages together
 │   └── cli.py                   iotmon read / live / status / alerts / rules / ...
-├── simulator/                   simulated IoT devices and the controlled attacks (Docker image)
-├── lab/                         Docker Compose lab: broker, DNS, devices, monitor, dashboard
+├── simulator/                   simulated IoT + OT (Modbus PLC) devices and the controlled attacks
+├── lab/                         Docker Compose labs: IoT (lab/) and industrial OT (lab/ot/)
 ├── samples/                     sample intrusion capture + one capture per test scenario
 ├── tools/                       capture generators, scenario runners, demo recorder
-├── tests/                       106 pytest tests
+├── tests/                       120 pytest tests
 ├── screenshots/                 architecture diagram, dashboard screenshots, demo GIF
 └── docs/                        weekly write-ups, architecture, rules, design decisions, lessons learned
 ```
@@ -379,6 +414,7 @@ what they do (`detections`, `storage`), and the brief's names
 | `iotmon inventory learn / show / approve` | Build and review the asset register |
 | `iotmon baseline learn / show` | Learn and inspect each device's normal behaviour |
 | `iotmon mqtt` | MQTT clients and topics |
+| `iotmon modbus` | Modbus/TCP conversations (OT): clients, PLCs, function codes, register ranges |
 | `iotmon report` | Devices, top flows, alerts |
 | `iotmon db info` / `db prune --keep-days N` | Schema, row counts, monitoring runs / retention |
 | `iotmon dashboard` | Web dashboard on `127.0.0.1:8080` (`--read-only` disables triage) |
@@ -412,6 +448,7 @@ the alerts the engine produces. CI runs them on every push.
 | 4 | [IoT protocols (MQTT)](docs/04-iot-protocols.md) |
 | 5 | [Logging and security dashboard](docs/05-logging-dashboard.md) |
 | 6 | [Turning it into a presentable project](docs/06-project-presentation.md) |
+| 7 | [Industrial / OT security expansion (Modbus, zones, PLC)](docs/07-ot-ics-expansion.md) |
 | | [Architecture](docs/architecture.md) · [Detection rules](docs/detection-rules.md) · [Design decisions](docs/design-decisions.md) · [Lessons learned](docs/lessons-learned.md) · [Lab setup](docs/lab-setup.md) · [Roadmap](docs/roadmap.md) |
 
 ## Scope

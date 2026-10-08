@@ -8,7 +8,7 @@
 network:
   # Addresses inside these networks are treated as monitored devices
   # (inventory, behavioural baselines). Everything else is a remote peer.
-  lab_networks: ["192.168.1.0/24", "172.28.0.0/24"]
+  lab_networks: ["192.168.1.0/24", "172.28.0.0/24", "192.168.10.0/24"]
   # Private ranges outside the monitored segment (other VLANs, the IT
   # network). Peers here are not "external" for DET-005; every other
   # routable address is.
@@ -25,3 +25,29 @@ baseline:
 flows:
   # A flow with no packets for this long is closed and written to the database.
   idle_timeout_s: 60
+
+# OT / ICS segmentation policy (Week 7). Used by DET-010..015. With no zones
+# or assets declared the OT rules never fire, so IoT-only setups are
+# unaffected. The addressing below matches the OT lab (lab/ot/).
+ot:
+  zones:
+    OT: ["192.168.10.0/24"]          # the control network (PLCs, HMI, engineering)
+    IT: ["192.168.1.0/24"]           # the office / enterprise network
+  # Known OT assets and their role (used for the allowlist and asset records).
+  assets:
+    "192.168.10.1": {role: gateway, label: "OT gateway"}
+    "192.168.10.20": {role: plc, label: "Line 1 PLC"}
+    "192.168.10.10": {role: engineering_workstation, label: "Engineering workstation"}
+    "192.168.10.11": {role: hmi, label: "HMI panel"}
+  # Allowlisted communication into the OT zone: initiator role -> target roles.
+  policy:
+    allow:
+      engineering_workstation: [plc, hmi]
+      hmi: [plc]
+      plc: [hmi]
+  # Who may speak Modbus to a PLC, and who may write (change the process).
+  modbus:
+    allowed_clients: [engineering_workstation, hmi]
+    writers: [engineering_workstation]
+  # Protocols that are normal inside the OT zone; anything else is DET-013.
+  expected_protocols: [MODBUS, ARP, NTP, ICMP]

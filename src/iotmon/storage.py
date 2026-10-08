@@ -56,7 +56,10 @@ CREATE TABLE IF NOT EXISTS devices (
     services     TEXT,
     peers        INTEGER,
     connections  INTEGER,
-    status       TEXT
+    status       TEXT,
+    zone         TEXT,
+    device_type  TEXT,
+    risk_score   INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS flows (
@@ -111,6 +114,23 @@ CREATE TABLE IF NOT EXISTS traffic (
     PRIMARY KEY (minute, app)
 );
 
+-- Modbus/TCP conversations (Week 7): one row per client -> PLC relationship.
+CREATE TABLE IF NOT EXISTS modbus_conversations (
+    client         TEXT NOT NULL,
+    server         TEXT NOT NULL,
+    first_seen     REAL,
+    last_seen      REAL,
+    requests       INTEGER,
+    responses      INTEGER,
+    exceptions     INTEGER,
+    writes         INTEGER,
+    functions      TEXT,
+    units          TEXT,
+    read_registers TEXT,
+    write_registers TEXT,
+    PRIMARY KEY (client, server)
+);
+
 -- One row per monitoring run (Week 5): what was analysed, when, and how much.
 -- started / updated / ended are wall-clock times, first / last_packet packet times.
 CREATE TABLE IF NOT EXISTS runs (
@@ -129,12 +149,13 @@ CREATE TABLE IF NOT EXISTS runs (
 """
 
 # Bumped whenever a table or column is added; `iotmon db info` shows it.
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # Columns added after a table was first released. Databases written by an
 # older version are upgraded in place when they are opened.
 ADDED_COLUMNS = {
-    "devices": (("connections", "INTEGER"), ("status", "TEXT")),                    # Week 2
+    "devices": (("connections", "INTEGER"), ("status", "TEXT"),                     # Week 2
+                ("zone", "TEXT"), ("device_type", "TEXT"), ("risk_score", "INTEGER")),  # Week 7
     "alerts": (("rule_id", "TEXT"),                                                 # Week 3
                ("run_id", "INTEGER"), ("status", "TEXT NOT NULL DEFAULT 'open'"),   # Week 5
                ("note", "TEXT"), ("updated", "REAL")),
@@ -278,9 +299,10 @@ class Storage:
             rows.append(r)
         self.db.executemany(
             "INSERT OR REPLACE INTO devices (key, mac, ips, vendor, name, role, first_seen, last_seen,"
-            " packets_sent, packets_recv, bytes_sent, bytes_recv, protocols, services, peers, connections, status)"
+            " packets_sent, packets_recv, bytes_sent, bytes_recv, protocols, services, peers, connections, status,"
+            " zone, device_type, risk_score)"
             " VALUES (:key,:mac,:ips,:vendor,:name,:role,:first_seen,:last_seen,:packets_sent,:packets_recv,"
-            ":bytes_sent,:bytes_recv,:protocols,:services,:peers,:connections,:status)",
+            ":bytes_sent,:bytes_recv,:protocols,:services,:peers,:connections,:status,:zone,:device_type,:risk_score)",
             rows,
         )
 
@@ -295,6 +317,17 @@ class Storage:
             "INSERT OR REPLACE INTO mqtt_topics (topic, first_seen, last_seen, messages, last_value, publishers)"
             " VALUES (:topic,:first_seen,:last_seen,:messages,:last_value,:publishers)",
             [t.as_dict() for t in tracker.topics.values()],
+        )
+
+    def modbus(self, tracker) -> None:
+        if not tracker.conversations:
+            return
+        self.db.executemany(
+            "INSERT OR REPLACE INTO modbus_conversations (client, server, first_seen, last_seen, requests,"
+            " responses, exceptions, writes, functions, units, read_registers, write_registers)"
+            " VALUES (:client,:server,:first_seen,:last_seen,:requests,:responses,:exceptions,:writes,"
+            ":functions,:units,:read_registers,:write_registers)",
+            [c.as_dict() for c in tracker.conversations.values()],
         )
 
     def commit(self, ended: bool = False) -> None:

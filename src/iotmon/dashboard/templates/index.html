@@ -70,6 +70,12 @@
   .asset { font-weight: 600; white-space: nowrap; }
   .asset.approved { color: var(--muted); font-weight: 400; }
   .asset.pending, .asset.new { color: var(--warning); }
+  /* OT zone and risk badges */
+  .zone { font-weight: 600; font-size: 11px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border); }
+  .zone.OT { color: var(--critical); border-color: var(--critical); }
+  .zone.IT { color: var(--s1); border-color: var(--s1); }
+  .risk { display: inline-block; min-width: 26px; text-align: center; font-weight: 600;
+          font-variant-numeric: tabular-nums; color: #fff; background: var(--c); border-radius: 4px; padding: 0 5px; }
   .empty { color: var(--muted); padding: 24px 0; text-align: center; }
   details summary { cursor: pointer; color: var(--ink-2); }
 
@@ -185,11 +191,20 @@
     </table></div>
   </section>
 
+  <section class="card full" id="modbus-card" hidden>
+    <h2>Modbus/TCP conversations (OT)</h2>
+    <div class="scroll"><table id="modbus">
+      <thead><tr><th>Client</th><th>PLC</th><th class="num">Requests</th><th class="num">Writes</th>
+        <th class="num">Exceptions</th><th>Units</th><th>Read registers</th><th>Write registers</th><th>Functions</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+
   <section class="card full">
     <h2>Device inventory</h2>
     <div class="scroll"><table id="devices">
-      <thead><tr><th>IP</th><th>MAC</th><th>Vendor</th><th>Role</th><th>Name</th><th>Services</th>
-        <th>Protocols</th><th class="num">Conn.</th><th class="num">Sent</th><th class="num">Received</th><th>First seen</th><th>Last seen</th><th>Status</th></tr></thead>
+      <thead><tr><th>IP</th><th>Zone</th><th>Type</th><th class="num">Risk</th><th>Vendor</th><th>Role</th><th>Name</th><th>Services</th>
+        <th>Protocols</th><th class="num">Conn.</th><th class="num">Sent</th><th class="num">Received</th><th>Last seen</th><th>Status</th></tr></thead>
       <tbody></tbody>
     </table></div>
   </section>
@@ -414,11 +429,18 @@ document.querySelector("#risky").addEventListener("click", e => {
 });
 if (READ_ONLY) document.getElementById("th-acts").textContent = "";
 
+const zoneTag = z => !z ? `<span class="muted">-</span>` : `<span class="zone ${esc(z)}">${esc(z)}</span>`;
+const riskTag = r => { r = r || 0; const c = r >= 80 ? "critical" : r >= 55 ? "serious" : r >= 30 ? "warning" : "good";
+  return `<span class="risk" style="--c:var(--${c})">${r}</span>`; };
+
 function drawDevices(rows) {
+  rows = rows.slice().sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0));
   document.querySelector("#devices tbody").innerHTML = rows.length ? rows.map(d => `
     <tr>
       <td class="mono">${esc(d.ips)}</td>
-      <td class="mono">${esc(d.mac || "-")}</td>
+      <td>${zoneTag(d.zone)}</td>
+      <td>${esc(d.device_type || "-")}</td>
+      <td class="num">${riskTag(d.risk_score)}</td>
       <td>${esc(d.vendor)}</td>
       <td>${esc(d.role)}</td>
       <td class="mono">${esc(d.name || "")}</td>
@@ -427,10 +449,29 @@ function drawDevices(rows) {
       <td class="num">${(d.connections || 0).toLocaleString()}</td>
       <td class="num">${fmtBytes(d.bytes_sent)}</td>
       <td class="num">${fmtBytes(d.bytes_recv)}</td>
-      <td class="mono">${fmtTime(d.first_seen)}</td>
       <td class="mono">${fmtTime(d.last_seen)}</td>
       <td>${d.status ? `<span class="asset ${esc(d.status)}">${esc(d.status)}</span>` : `<span class="muted">-</span>`}</td>
-    </tr>`).join("") : `<tr><td colspan="13" class="empty">No devices seen yet.</td></tr>`;
+    </tr>`).join("") : `<tr><td colspan="14" class="empty">No devices seen yet.</td></tr>`;
+}
+
+function drawModbus(m) {
+  const card = document.getElementById("modbus-card");
+  card.hidden = !m.conversations.length;
+  if (!m.conversations.length) return;
+  document.querySelector("#modbus h2, #modbus-card h2") && (document.querySelector("#modbus-card h2").textContent =
+    `Modbus/TCP conversations (OT) — PLC: ${m.servers.join(", ")}`);
+  document.querySelector("#modbus tbody").innerHTML = m.conversations.map(c => `
+    <tr>
+      <td class="mono">${esc(c.client)}</td>
+      <td class="mono">${esc(c.server)}</td>
+      <td class="num">${c.requests.toLocaleString()}</td>
+      <td class="num">${c.writes ? `<b>${c.writes}</b>` : 0}</td>
+      <td class="num">${c.exceptions || 0}</td>
+      <td class="mono">${esc(c.units || "-")}</td>
+      <td class="mono">${esc(c.read_registers || "-")}</td>
+      <td class="mono">${esc(c.write_registers || "-")}</td>
+      <td>${esc((c.functions || "").split(",").join(", "))}</td>
+    </tr>`).join("");
 }
 
 function drawMqtt(m) {
@@ -461,9 +502,9 @@ function drawMqtt(m) {
 async function refresh() {
   try {
     const get = p => fetch(p).then(r => r.json());
-    const [s, t, a, d, m] = await Promise.all([get("api/state"), get("api/traffic"), get("api/alerts?" + alertQuery()),
-                                               get("api/devices"), get("api/mqtt")]);
-    drawState(s); drawTraffic(t); drawAlerts(a); drawDevices(d); drawMqtt(m);
+    const [s, t, a, d, m, mb] = await Promise.all([get("api/state"), get("api/traffic"), get("api/alerts?" + alertQuery()),
+                                               get("api/devices"), get("api/mqtt"), get("api/modbus")]);
+    drawState(s); drawTraffic(t); drawAlerts(a); drawDevices(d); drawMqtt(m); drawModbus(mb);
   } catch (e) { console.error(e); }
 }
 refresh();

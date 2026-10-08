@@ -128,6 +128,12 @@ def create_app(db_path: str | Path, read_only: bool = False) -> Flask:
             "topics": query("SELECT * FROM mqtt_topics ORDER BY topic"),
         })
 
+    @app.get("/api/modbus")
+    def modbus():
+        """Modbus/TCP conversations and the PLC servers (Week 7, OT)."""
+        convs = query("SELECT * FROM modbus_conversations ORDER BY server, client")
+        return jsonify({"conversations": convs, "servers": sorted({c["server"] for c in convs})})
+
     @app.get("/api/flows")
     def flows():
         return jsonify(query("SELECT * FROM flows ORDER BY bytes DESC LIMIT 25"))
