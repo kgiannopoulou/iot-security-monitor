@@ -1,8 +1,8 @@
 # Detection Rules
 
-All rules live in [`iotmon/detections.py`](../iotmon/detections.py). Their
-thresholds are in [`iotmon/default.toml`](../iotmon/default.toml) and can be
-overridden with `--config my.toml`. The design rationale and the test
+All rules live in [`src/iotmon/detections.py`](../src/iotmon/detections.py). Their
+thresholds are in [`rules/detection_rules.yaml`](../rules/detection_rules.yaml) and can be
+overridden with `--config site.yaml`. The design rationale and the test
 scenarios are in the [Week 3 write-up](03-detection-engine.md).
 
 Design principles:
@@ -60,7 +60,7 @@ Every alert is written to `alerts.jsonl` as an evidence record:
 ## The behavioural baseline
 
 DET-003, DET-004 and DET-005 compare traffic with a per-device profile
-([`iotmon/baseline.py`](../iotmon/baseline.py)):
+([`src/iotmon/baseline.py`](../src/iotmon/baseline.py)):
 
 | Field | Learned from | Used by |
 |---|---|---|
@@ -293,7 +293,7 @@ Validated live in the Docker lab with gratuitous ARP
 
 ## DET-009 `mqtt_activity`: abnormal MQTT activity (Week 4)
 
-**Logic.** The MQTT tracker ([`iotmon/mqtt.py`](../iotmon/mqtt.py)) maps
+**Logic.** The MQTT tracker ([`src/iotmon/mqtt.py`](../src/iotmon/mqtt.py)) maps
 every MQTT packet to a client ID (from the session's CONNECT) and a broker,
 and the baseline learns, per device, the client IDs it connects with, the
 topics it publishes and subscribes to, and its busiest 60 s of publishing.

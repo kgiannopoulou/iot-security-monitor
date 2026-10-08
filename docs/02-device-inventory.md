@@ -219,10 +219,10 @@ the broker's address. Commands and full output are in the
 
 | Piece | Where |
 |---|---|
-| Per-run inventory, connection counting, address-change tracking | [`iotmon/inventory.py`](../iotmon/inventory.py) |
-| Persistent register: load, merge (replay-safe), approve, save | [`iotmon/assets.py`](../iotmon/assets.py) |
-| `new_device` (register-aware) and `device_change` rules | [`iotmon/detections.py`](../iotmon/detections.py) |
-| `inventory learn / show / approve`, `--inventory` on `read` / `live` | [`iotmon/cli.py`](../iotmon/cli.py) |
+| Per-run inventory, connection counting, address-change tracking | [`src/iotmon/inventory.py`](../src/iotmon/inventory.py) |
+| Persistent register: load, merge (replay-safe), approve, save | [`src/iotmon/assets.py`](../src/iotmon/assets.py) |
+| `new_device` (register-aware) and `device_change` rules | [`src/iotmon/detections.py`](../src/iotmon/detections.py) |
+| `inventory learn / show / approve`, `--inventory` on `read` / `live` | [`src/iotmon/cli.py`](../src/iotmon/cli.py) |
 | Tests: record fields, ARP-spoofing conflict, IP change, register round trip, bootstrap, replay safety, old-database upgrade, the full learn → detect → approve workflow | [`tests/test_inventory.py`](../tests/test_inventory.py) |
 
 ## Self-check

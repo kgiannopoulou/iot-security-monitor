@@ -1,0 +1,56 @@
+# Docker lab rebuilt from the Week 6 layout (simulator/, src/, config.yaml, rules/), 2026-10-08.
+# python tools/lab_scenarios.py -> 8/8 live scenarios passed. Then:
+
+$ docker compose exec dashboard python -m iotmon rules
+ID       DETECTOR             ON  SEVERITIES             NAME
+DET-001  new_device           yes medium                 New/unrecognized device
+DET-002  port_scan            yes medium, high           Port scanning behaviour
+DET-003  connection_rate      yes medium                 Abnormal connection rate
+DET-004  suspicious_port      yes medium, high, critical Communication with unusual ports
+DET-005  external_connection  yes medium, high           Unexpected external connection
+DET-006  traffic_spike        yes high                   Traffic volume spike
+DET-007  failed_connections   yes medium, high           Repeated failed connections
+DET-008  device_change        yes low, high              Device address change
+DET-009  mqtt_activity        yes low, medium, high      Abnormal MQTT activity
+
+$ docker compose exec dashboard python -m iotmon status --db /data/iotmon.db
+IOT SECURITY MONITOR                                                                posture: AT RISK
+────────────────────────────────────────────────────────────────────────────────────────────────────
+Devices monitored                     10   2 not approved
+Packets analyzed                   1,823   437.8 kB
+Security alerts                       11   11 active
+High-severity alerts                   4   4 active
+Traffic window                             2026-10-08 08:48 - 08:53 UTC
+Last run                              #1   live iotlab0 (running, 1,823 packets)
+
+Why AT RISK
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  - 4 active high alerts: DET-002 port_scan, DET-004 suspicious_port, DET-005 external_connection,
+    DET-009 mqtt_activity
+  - 7 active medium alerts: DET-001 new_device, DET-003 connection_rate, DET-004 suspicious_port,
+    DET-009 mqtt_activity
+  - 2 devices not approved in the asset register: 172.28.0.66, 172.28.0.1
+  - Most affected device: 172.28.0.20 (Espressif (ESP32/ESP8266)), 6 active alerts
+
+Devices needing attention
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  IP              VENDOR                     ALERTS  WORST     RULES
+  172.28.0.20     Espressif (ESP32/ESP8266)       6  HIGH      DET-003, DET-004, DET-005, DET-009
+  172.28.0.10     Raspberry Pi Trading            7  HIGH      DET-002, DET-003, DET-004, DET-009
+  172.28.0.66     Raspberry Pi Foundation         2  HIGH      DET-001, DET-002
+  172.28.0.5      locally administered (virt      3  MEDIUM    DET-004, DET-009
+  172.28.0.22     Hikvision                       2  HIGH      DET-004
+
+Recent Alerts
+────────────────────────────────────────────────────────────────────────────────────────────────────
+    11 08:52:42  HIGH     DET-009  MQTT topic spoofing: 172.28.0.20 published to 'factory/motor/r...
+    10 08:52:20  MEDIUM   DET-009  MQTT message burst: 172.28.0.20 published 60 messages in 60s (...
+     9 08:51:58  MEDIUM   DET-009  Broad MQTT subscription: 172.28.0.5 subscribed to '#' (every t...
+     8 08:51:57  MEDIUM   DET-009  New MQTT client: 172.28.0.5 connected to broker 172.28.0.10 as...
+     7 08:51:57  MEDIUM   DET-004  Unusual port: 172.28.0.5 -> 172.28.0.10:1883 (MQTT), outside t...
+     6 08:51:47  HIGH     DET-005  Unexpected external connection: 172.28.0.20 -> 198.51.100.23:8883
+     5 08:51:35  HIGH     DET-004  TELNET session 172.28.0.20 -> 172.28.0.22:23
+     4 08:51:35  MEDIUM   DET-004  Unusual port: 172.28.0.20 -> 172.28.0.22:80 (HTTP), outside th...
+     3 08:51:21  MEDIUM   DET-003  Abnormal connection rate: 172.28.0.20 opened 20 connections in...
+     2 08:51:05  HIGH     DET-002  Port scan: 172.28.0.66 probed 15 ports on 172.28.0.10
+     1 08:50:54  MEDIUM   DET-001  New IoT device detected: 172.28.0.66 (Raspberry Pi Foundation)

@@ -42,7 +42,7 @@ the smart plug's daily call to its vendor cloud.
 
 So the three new rules compare a device with **itself**. During a learning
 period the monitor builds a profile per device
-([`iotmon/baseline.py`](../iotmon/baseline.py)), then freezes it:
+([`src/iotmon/baseline.py`](../src/iotmon/baseline.py)), then freezes it:
 
 ```
 $ python -m iotmon baseline learn samples/iot-lab.pcap -d 300
@@ -195,7 +195,7 @@ checks that the committed pcaps match the generator byte for byte.
 
 Synthetic captures prove the logic; the lab proves it on real TCP stacks.
 [`tools/lab_scenarios.py`](../tools/lab_scenarios.py) runs the attack actions in
-[`lab/scenarios/attacks.py`](../lab/scenarios/attacks.py) (standard library
+[`simulator/attacks.py`](../simulator/attacks.py) (standard library
 only), either in a short-lived "rogue" container with a Raspberry Pi MAC or
 inside the real temperature-sensor container as a compromised device, and
 reads the result from the dashboard API.
@@ -228,7 +228,7 @@ seen started talking. The fix is site configuration, not code. Infrastructure
 that only speaks when something goes wrong (gateways, a backup router) is
 easy to miss when an inventory is built only from observed traffic, so it
 belongs in the known-devices list. The lab now passes
-[`lab/monitor.toml`](../lab/monitor.toml) to the monitor.
+[`lab/monitor.yaml`](../lab/monitor.yaml) to the monitor.
 
 **Run 2, clean lab:**
 
@@ -248,7 +248,7 @@ positive on the camera (in the first minutes, its 20 kB upload and the
 admin's 30 kB snapshot can share one 10 s bucket while the history is still
 short). It is listed on the [roadmap](roadmap.md).
 
-![Dashboard after the live scenarios](images/dashboard-week3-live.png)
+![Dashboard after the live scenarios](../screenshots/dashboard-week3-live.png)
 
 ## 7. The full kill chain, rule by rule
 
@@ -293,10 +293,10 @@ botnet phase now has three independent views: *where* it connects
 
 | What | Where |
 |---|---|
-| Rule implementations | [`iotmon/detections.py`](../iotmon/detections.py) |
-| Behavioural baseline | [`iotmon/baseline.py`](../iotmon/baseline.py) |
-| Rule IDs, evidence format | [`iotmon/models.py`](../iotmon/models.py) |
-| Thresholds | [`iotmon/default.toml`](../iotmon/default.toml) |
+| Rule implementations | [`src/iotmon/detections.py`](../src/iotmon/detections.py) |
+| Behavioural baseline | [`src/iotmon/baseline.py`](../src/iotmon/baseline.py) |
+| Rule IDs, evidence format | [`src/iotmon/models.py`](../src/iotmon/models.py) |
+| Thresholds | [`rules/detection_rules.yaml`](../rules/detection_rules.yaml) |
 | Scenario captures and runner | [`tools/generate_scenarios.py`](../tools/generate_scenarios.py), [`tools/run_scenarios.py`](../tools/run_scenarios.py), [`samples/scenarios/`](../samples/scenarios) |
-| Live lab scenarios | [`lab/scenarios/attacks.py`](../lab/scenarios/attacks.py), [`tools/lab_scenarios.py`](../tools/lab_scenarios.py), [`lab/monitor.toml`](../lab/monitor.toml) |
+| Live lab scenarios | [`simulator/attacks.py`](../simulator/attacks.py), [`tools/lab_scenarios.py`](../tools/lab_scenarios.py), [`lab/monitor.yaml`](../lab/monitor.yaml) |
 | Tests | [`tests/test_detections.py`](../tests/test_detections.py), [`tests/test_scenarios.py`](../tests/test_scenarios.py), [`tests/test_end_to_end.py`](../tests/test_end_to_end.py) |

@@ -1,0 +1,27 @@
+# Monitor configuration (site settings). Detection rules and their
+# thresholds are in rules/detection_rules.yaml.
+#
+# A site config passed with --config only needs the keys it changes; they
+# are merged over this file (see lab/monitor.yaml for an example). It may
+# also override rule settings under `detections: <detector>: ...`.
+
+network:
+  # Addresses inside these networks are treated as monitored devices
+  # (inventory, behavioural baselines). Everything else is a remote peer.
+  lab_networks: ["192.168.1.0/24", "172.28.0.0/24"]
+  # Private ranges outside the monitored segment (other VLANs, the IT
+  # network). Peers here are not "external" for DET-005; every other
+  # routable address is.
+  internal_networks: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"]
+
+baseline:
+  # Behavioural baseline used by DET-003/004/005/009: per device, the ports
+  # it uses and serves, its internet peers, its peak connection rate and its
+  # MQTT topics. Learned during the first N seconds of a capture, unless
+  # loaded with --baseline FILE (build one from trusted traffic with
+  # `iotmon baseline learn`).
+  learning_period_s: 120
+
+flows:
+  # A flow with no packets for this long is closed and written to the database.
+  idle_timeout_s: 60

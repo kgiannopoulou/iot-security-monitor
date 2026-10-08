@@ -3,7 +3,7 @@
 Standard library only (the Week 4 MQTT actions use paho-mqtt, which the lab
 device image already has), so the file can be piped into any lab container:
 
-    docker exec -i iot-lab-temp-sensor-1 python - flood < lab/scenarios/attacks.py
+    docker exec -i iot-lab-temp-sensor-1 python - flood < simulator/attacks.py
 
 tools/lab_scenarios.py runs them in order and checks the monitor's alerts.
 Every target is a lab address. The one "internet" connection (external) is

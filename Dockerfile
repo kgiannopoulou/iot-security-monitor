@@ -6,6 +6,9 @@ WORKDIR /app
 ENV PYTHONUNBUFFERED=1
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY iotmon ./iotmon
+COPY config.yaml ./
+COPY rules ./rules
+COPY src ./src
+ENV PYTHONPATH=/app/src
 ENTRYPOINT ["python", "-m", "iotmon"]
 CMD ["--help"]

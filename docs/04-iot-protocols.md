@@ -43,14 +43,14 @@ shows the change.
 | Motor drive (172.28.0.23, Siemens OUI) | `motor-drive-01` | `factory/pressure`, `factory/motor/rpm` | `1.8`, `1450` | 2 s |
 | Smart plug (172.28.0.21) | `smart-plug-01` | `factory/line1/plug/power`, subscribes to `.../plug/cmd` | `{"w": 41.6, "on": true}` | 10 s |
 
-The motor drive is new this week ([`lab/devices/device.py`](../lab/devices/device.py)).
+The motor drive is new this week ([`simulator/iot_devices.py`](../simulator/iot_devices.py)).
 
 ## 3. What the monitor sees
 
-The parser ([`iotmon/parser.py`](../iotmon/parser.py)) now records every MQTT
+The parser ([`src/iotmon/parser.py`](../src/iotmon/parser.py)) now records every MQTT
 control packet in a segment, the client ID, username (never the password),
 keepalive, each PUBLISH's topic, value preview, QoS and retain flag, and
-each SUBSCRIBE's topics. The MQTT tracker ([`iotmon/mqtt.py`](../iotmon/mqtt.py))
+each SUBSCRIBE's topics. The MQTT tracker ([`src/iotmon/mqtt.py`](../src/iotmon/mqtt.py))
 ties packets to sessions and builds the broker's view:
 
 ```
@@ -189,7 +189,7 @@ drive and raised no MQTT false positive. There is now a regression test,
 down: a burst *during* learning would be learned as normal, which is one
 more reason to learn from a reviewed capture (`iotmon baseline learn`).
 
-![Dashboard after the Week 4 live scenarios](images/dashboard-week4-live.png)
+![Dashboard after the Week 4 live scenarios](../screenshots/dashboard-week4-live.png)
 
 ## 6. Limits and next steps
 
@@ -208,11 +208,11 @@ more reason to learn from a reviewed capture (`iotmon baseline learn`).
 
 | What | Where |
 |---|---|
-| MQTT decoding | [`iotmon/parser.py`](../iotmon/parser.py) |
-| MQTT tracker (clients, topics, events) | [`iotmon/mqtt.py`](../iotmon/mqtt.py) |
-| DET-009 | [`iotmon/detections.py`](../iotmon/detections.py) (`MqttActivityDetector`), thresholds in [`default.toml`](../iotmon/default.toml) |
-| MQTT baseline fields | [`iotmon/baseline.py`](../iotmon/baseline.py) |
+| MQTT decoding | [`src/iotmon/parser.py`](../src/iotmon/parser.py) |
+| MQTT tracker (clients, topics, events) | [`src/iotmon/mqtt.py`](../src/iotmon/mqtt.py) |
+| DET-009 | [`src/iotmon/detections.py`](../src/iotmon/detections.py) (`MqttActivityDetector`), thresholds in [`rules/detection_rules.yaml`](../rules/detection_rules.yaml) |
+| MQTT baseline fields | [`src/iotmon/baseline.py`](../src/iotmon/baseline.py) |
 | CLI, SQLite, dashboard | `iotmon mqtt`, `mqtt_clients` / `mqtt_topics` tables, `/api/mqtt` |
-| Lab telemetry | [`lab/devices/device.py`](../lab/devices/device.py) (`temp_sensor`, `motor_drive`), [`lab/docker-compose.yml`](../lab/docker-compose.yml) |
-| Scenarios | `samples/scenarios/det-009-*.pcap`, [`lab/scenarios/attacks.py`](../lab/scenarios/attacks.py) (`mqtt-*`) |
+| Lab telemetry | [`simulator/iot_devices.py`](../simulator/iot_devices.py) (`temp_sensor`, `motor_drive`), [`lab/docker-compose.yml`](../lab/docker-compose.yml) |
+| Scenarios | `samples/scenarios/det-009-*.pcap`, [`simulator/attacks.py`](../simulator/attacks.py) (`mqtt-*`) |
 | Tests | [`tests/test_mqtt.py`](../tests/test_mqtt.py), [`tests/test_scenarios.py`](../tests/test_scenarios.py) |

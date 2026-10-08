@@ -7,7 +7,7 @@ which rules fired, through the dashboard API.
 DET-001/002 run in a short-lived "rogue" container (Raspberry Pi MAC, new IP);
 DET-003/004/005 and the DET-009 burst and spoofing run inside the
 temperature-sensor container, playing a compromised device; the new MQTT
-client runs in the admin workstation container. The attack code is lab/scenarios/attacks.py.
+client runs in the admin workstation container. The attack code is simulator/attacks.py.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-ATTACKS = (ROOT / "lab" / "scenarios" / "attacks.py").read_bytes()
+ATTACKS = (ROOT / "simulator" / "attacks.py").read_bytes()
 ROGUE = ["docker", "run", "--rm", "-i", "--network", "iot-lab_iotlab", "--ip", "172.28.0.66",
          "--mac-address", "b8:27:eb:00:00:66", "iot-lab-temp-sensor", "python", "-"]
 SENSOR = ["docker", "exec", "-i", "iot-lab-temp-sensor-1", "python", "-"]

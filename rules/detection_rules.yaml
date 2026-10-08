@@ -1,0 +1,182 @@
+# Detection rules for the IoT Security Monitor.
+#
+# This file is the single source of truth for the rule catalogue: the rule
+# IDs and names in alerts, the thresholds each detector uses, and which
+# rules are enabled. The Python code in src/iotmon/detections.py implements
+# the logic; everything you would tune lives here.
+#
+#   id          stable rule ID used in alerts, the dashboard and exports
+#   detector    the detector class that implements it (detections.py)
+#   severities  the severities this rule can raise (checked by the tests)
+#   attack      MITRE ATT&CK (Enterprise / ICS) techniques the alerts map to
+#               (checked by the tests against the alerts the engine produces)
+#   settings    thresholds and windows, passed to the detector as-is
+#
+# No rule is "if port == X then hacker": each one counts something inside a
+# time window and compares it with a threshold, and the core rules take that
+# threshold from the device's own learned baseline. Full reasoning, false
+# positives and blind spots: docs/detection-rules.md.
+#
+# Override any setting without editing this file: put it under
+# `detections: <detector>: ...` in a site config passed with --config, or
+# point --rules at a copy of this file.
+
+rules:
+  - id: DET-001
+    detector: new_device
+    name: New/unrecognized device
+    description: >
+      A MAC address that is not in the asset register. Without a register,
+      a device first seen after the learning period.
+    severities: [medium]
+    attack: ["T1200 Hardware Additions", "T0848 Rogue Master (ICS)"]
+    enabled: true
+    settings:
+      learning_period_s: 60   # without an asset register: devices seen in the first minute form the baseline
+      known_devices: []       # MACs or IPs that never alert, e.g. ["b8:27:eb:12:34:56"]
+                              # (with --inventory, the asset register is the main allowlist)
+
+  - id: DET-002
+    detector: port_scan
+    name: Port scanning behaviour
+    description: >
+      One source touching many ports on one host (vertical), one port on
+      many hosts (horizontal), or ARP-resolving many addresses, in one window.
+    severities: [medium, high]
+    attack: ["T1046 Network Service Discovery", "T1018 Remote System Discovery",
+             "T0846 Remote System Discovery (ICS)"]
+    enabled: true
+    settings:
+      window_s: 60
+      vertical_threshold: 15    # distinct ports on one host
+      horizontal_threshold: 8   # same port on distinct hosts
+      arp_threshold: 12         # distinct ARP targets
+      cooldown_s: 300
+
+  - id: DET-003
+    detector: connection_rate
+    name: Abnormal connection rate
+    description: >
+      New connections from a device in one window above max(min_connections,
+      peak_factor x its busiest baseline window).
+    severities: [medium]
+    attack: ["T1499 Endpoint Denial of Service", "T0814 Denial of Service (ICS)"]
+    enabled: true
+    settings:
+      window_s: 60
+      min_connections: 20       # never alert below this many new connections per window
+      peak_factor: 5.0          # ... or below 5x the device's busiest baseline window
+      scan_suppress_s: 300      # a source flagged by port_scan is not re-flagged here
+      cooldown_s: 300
+
+  - id: DET-004
+    detector: suspicious_port
+    name: Communication with unusual ports
+    description: >
+      An established session on a port outside the device's baseline, or on
+      a high-risk service (Telnet, IRC, ADB, ...) whatever the baseline;
+      plaintext MQTT to the internet.
+    severities: [medium, high, critical]
+    attack: ["T1021 Remote Services", "T0886 Remote Services (ICS)", "T1071 Application Layer Protocol"]
+    enabled: true
+    settings:
+      cooldown_s: 600
+      unusual_severity: medium  # established session on a port outside the device's baseline
+      ports:                    # port -> severity, alerted whenever a session is established
+        21: medium              # FTP, cleartext credentials
+        23: high                # Telnet, Mirai's favourite
+        69: medium              # TFTP, firmware pulls
+        445: medium             # SMB
+        2323: high              # Telnet alternate (Mirai)
+        3389: medium            # RDP
+        4444: critical          # Metasploit default handler
+        5555: high              # Android Debug Bridge
+        6667: critical          # IRC, classic botnet C2
+        7547: medium            # TR-069 CWMP
+
+  - id: DET-005
+    detector: external_connection
+    name: Unexpected external connection
+    description: >
+      An internet host that is not among the device's learned peers. High if
+      the device is local-only, the address was never resolved by DNS, or
+      the device fans out to many new hosts.
+    severities: [medium, high]
+    attack: ["T1071 Application Layer Protocol", "T0869 Standard Application Layer Protocol (ICS)"]
+    enabled: true
+    settings:
+      dns_window_s: 600         # an address the device resolved this recently counts as looked up
+      fanout_window_s: 300
+      fanout_threshold: 10      # distinct unexpected internet hosts -> one high fan-out alert
+      host_alerts: 3            # per-host alerts per device and window before that
+      cooldown_s: 600
+
+  - id: DET-006
+    detector: traffic_spike
+    name: Traffic volume spike
+    description: >
+      Bytes or packets a device sends or receives per bucket above
+      max(mean + stddev_factor x sigma, min_ratio x mean, absolute floor) of
+      its own recent history.
+    severities: [high]
+    attack: ["T1498 Network Denial of Service", "T0814 Denial of Service (ICS)"]
+    enabled: true
+    settings:
+      bucket_s: 10
+      history_buckets: 30
+      min_history: 6
+      stddev_factor: 4.0
+      min_ratio: 5.0            # also at least 5x the mean
+      min_bytes: 50000          # ignore spikes below these absolute floors
+      min_packets: 500
+      cooldown_s: 300
+
+  - id: DET-007
+    detector: failed_connections
+    name: Repeated failed connections
+    description: >
+      Refused or unanswered connections to one service, or refused MQTT
+      logins, in one window.
+    severities: [medium, high]
+    attack: ["T1110 Brute Force", "T0812 Default Credentials (ICS)"]
+    enabled: true
+    settings:
+      window_s: 60
+      threshold: 10             # failures to the same service
+      mqtt_auth_threshold: 5    # refused MQTT CONNECTs
+      syn_timeout_s: 5
+
+  - id: DET-008
+    detector: device_change
+    name: Device address change
+    description: >
+      An IP address claimed by a second MAC (what ARP spoofing looks like),
+      or a known MAC on a new IP.
+    severities: [low, high]
+    attack: ["T1557.002 ARP Cache Poisoning", "T0830 Adversary-in-the-Middle (ICS)", "T1036 Masquerading"]
+    enabled: true
+    settings:
+      ip_change_severity: low   # known MAC on a new IP (DHCP churn is the usual cause)
+      learning_period_s: 0      # IP conflicts (two MACs, one IP) are always high
+      cooldown_s: 300
+
+  - id: DET-009
+    detector: mqtt_activity
+    name: Abnormal MQTT activity
+    description: >
+      A new host or client ID on the broker, a publish burst above
+      max(min_messages, peak_factor x learned peak), a topic the client never
+      used, another device's topic (spoofed telemetry), or a subscription to
+      every topic.
+    severities: [low, medium, high]
+    attack: ["T0886 Remote Services (ICS)", "T0883 Internet Accessible Device (ICS)",
+             "T0806 Brute Force I/O (ICS)", "T0814 Denial of Service (ICS)",
+             "T0856 Spoof Reporting Message (ICS)", "T0855 Unauthorized Command Message (ICS)",
+             "T0801 Monitor Process State (ICS)", "T0861 Point & Tag Identification (ICS)"]
+    enabled: true
+    settings:
+      window_s: 60
+      min_messages: 30          # never a burst below this many publishes per window
+      peak_factor: 5.0          # ... or below 5x the client's busiest baseline window
+      topic_alerts: 3           # new-topic alerts per client per cooldown, so one rogue client cannot flood the queue
+      cooldown_s: 600

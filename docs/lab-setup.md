@@ -15,6 +15,12 @@ Everything runs on one machine in an isolated Docker bridge network,
 | `monitor` | host network | | `iotmon live -i iotlab0`, writes `data/lab/iotmon.db` |
 | `dashboard` | 127.0.0.1:8080 | | Reads the same database; alert triage is its only write |
 
+All simulated devices (and the vendor cloud and admin workstation) run one
+image built from [`simulator/`](../simulator); `ROLE` selects the behaviour in
+[`simulator/iot_devices.py`](../simulator/iot_devices.py). The monitor and dashboard run the
+project image built from the repository root. Host-side commands below
+(`python -m iotmon ...`, `tools/lab_scenarios.py`) need `pip install -e .` first.
+
 ## Run
 
 ```bash
@@ -140,7 +146,7 @@ Or open the MQTT clients and topics tables on the dashboard.
 ## Detection scenarios (Week 3 and 4)
 
 The monitor also runs with `--baseline /data/baseline.json` and the lab's
-own config, [`lab/monitor.toml`](../lab/monitor.toml). On a fresh start it
+own config, [`lab/monitor.yaml`](../lab/monitor.yaml). On a fresh start it
 learns each device's normal behaviour during the first 120 s and saves it
 to `data/lab/baseline.json`. Once that file exists, run the controlled
 scenarios:
@@ -161,7 +167,7 @@ python tools/lab_scenarios.py --only det-003-connection-flood   # one
 | `det-009-message-burst` | `temp-sensor` | 150 publishes to `factory/temperature` in 15 s | DET-009 |
 | `det-009-topic-spoofing` | `temp-sensor` | publishes `factory/motor/rpm = 0` (the motor drive's topic) | DET-009 |
 
-The attack code is [`lab/scenarios/attacks.py`](../lab/scenarios/attacks.py)
+The attack code is [`simulator/attacks.py`](../simulator/attacks.py)
 (standard library only, piped into the containers). Every target is a lab
 address. The single off-lab connection is sent with TTL 1, so the lab
 gateway drops it and nothing leaves the lab.

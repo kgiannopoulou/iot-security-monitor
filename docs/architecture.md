@@ -1,5 +1,9 @@
 # Architecture
 
+![Architecture](../screenshots/architecture.svg)
+
+Data flow in more detail (all modules are in `src/iotmon/`):
+
 ```
   pcap file ──┐                      ┌──▶ Inventory   (devices: MAC, vendor, role, connections) ◀─▶ inventory.json
               ├─▶ capture ─▶ parser ─┼──▶ FlowTable   (bidirectional conversations)
@@ -23,7 +27,8 @@
 |---|---|
 | `capture.py` | `read_pcap()` and `sniff_live()`. Both yield `PacketRecord`s, so everything downstream is identical for replay and live capture. Live capture runs scapy's `AsyncSniffer` in its own thread and hands packets over through a queue. |
 | `parser.py` | scapy packet → `PacketRecord`: link, network, transport, application. Decodes MQTT (CONNECT/CONNACK/PUBLISH/SUBSCRIBE), DNS, HTTP, NTP, ICMP, and labels TLS as encrypted. Never raises on malformed payloads. |
-| `models.py` | `PacketRecord`, `Alert` (and its evidence-record JSON form), the rule-ID catalogue, the known-services table, the service-port rule. |
+| `config.py` | Loads [`config.yaml`](../config.yaml) (site settings) and [`rules/detection_rules.yaml`](../rules/detection_rules.yaml) (rule catalogue and thresholds), validates the rules, and merges a site config (`--config`) over both. See [Week 6](06-project-presentation.md). |
+| `models.py` | `PacketRecord`, `Alert` (and its evidence-record JSON form), the rule-ID catalogue (registered from the rule file), the known-services table, the service-port rule. |
 | `flows.py` | Groups packets into client→server flows with idle expiry and TCP state (ESTABLISHED / CLOSED / REJECTED / NO-REPLY). |
 | `inventory.py` | Passive asset inventory: MAC-keyed devices, OUI vendor lookup, role inference from offered services and MQTT behaviour, connection counts, MAC/IP binding changes. |
 | `assets.py` | Persistent asset register (`data/inventory.json`): known devices keyed by MAC with status approved / pending, merged after each run (replay-safe), saved every 30 s during live capture. See [Week 2](02-device-inventory.md). |

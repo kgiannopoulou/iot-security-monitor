@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 
+from .config import load_rules
+
 # Well-known ports seen on IoT / OT networks. Used to label traffic and to
 # decide which side of a conversation is the "service" (server) side.
 KNOWN_SERVICES: dict[int, str] = {
@@ -43,19 +45,16 @@ KNOWN_SERVICES: dict[int, str] = {
 
 SEVERITIES = ("low", "medium", "high", "critical")
 
-# Detector name -> (rule ID, short name). DET-001..005 are the core detection
-# rules; 006..008 are supporting rules that add evidence to an incident.
-RULES: dict[str, tuple[str, str]] = {
-    "new_device": ("DET-001", "New/unrecognized device"),
-    "port_scan": ("DET-002", "Port scanning behaviour"),
-    "connection_rate": ("DET-003", "Abnormal connection rate"),
-    "suspicious_port": ("DET-004", "Communication with unusual ports"),
-    "external_connection": ("DET-005", "Unexpected external connection"),
-    "traffic_spike": ("DET-006", "Traffic volume spike"),
-    "failed_connections": ("DET-007", "Repeated failed connections"),
-    "device_change": ("DET-008", "Device address change"),
-    "mqtt_activity": ("DET-009", "Abnormal MQTT activity"),
-}
+# Detector name -> (rule ID, short name), from rules/detection_rules.yaml.
+# DET-001..005 are the core detection rules; 006..009 add evidence to an
+# incident (volume, failures, address changes, MQTT behaviour).
+RULES: dict[str, tuple[str, str]] = {}
+
+
+def register_rules(rules: list[dict]) -> None:
+    """Use a rule catalogue (from config.load_rules) for rule IDs and names."""
+    RULES.clear()
+    RULES.update({r["detector"]: (r["id"], r["name"]) for r in rules})
 
 
 def rule_id(rule: str) -> str:
@@ -157,3 +156,6 @@ class Alert:
         }
         d.update({k: v for k, v in self.details.items() if k not in d})
         return d
+
+
+register_rules(load_rules())

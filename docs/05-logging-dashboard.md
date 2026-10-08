@@ -25,7 +25,7 @@ Full transcripts: [`live-lab-week5.txt`](sample-output/live-lab-week5.txt)
 (Docker lab) and [`week5-status.txt`](sample-output/week5-status.txt)
 (sample capture).
 
-![Dashboard on the live lab after triage](images/dashboard-week5-live.png)
+![Dashboard on the live lab after triage](../screenshots/dashboard-week5-live.png)
 
 ---
 
@@ -58,7 +58,7 @@ a live sensor from a dead one.
 
 **Schema upgrades.** `PRAGMA user_version` holds the schema version (5).
 Opening an older database adds the missing columns in place
-(`ADDED_COLUMNS` in [`storage.py`](../iotmon/storage.py)), so a Week 4 lab
+(`ADDED_COLUMNS` in [`storage.py`](../src/iotmon/storage.py)), so a Week 4 lab
 database keeps its data. A test builds a pre-Week 5 database by hand and
 checks the upgrade.
 
@@ -96,7 +96,7 @@ traffic            40
 ## 2. The security posture
 
 The posture is a plain rule rather than a score, so it can be explained in
-one sentence ([`state.py`](../iotmon/state.py)):
+one sentence ([`state.py`](../src/iotmon/state.py)):
 
 | Posture | When |
 |---|---|
@@ -188,7 +188,7 @@ approve it. That is the asset register doing its job, not noise.
 
 ## 4. The dashboard
 
-[`iotmon/dashboard/`](../iotmon/dashboard) now opens with the answer:
+[`src/iotmon/dashboard/`](../src/iotmon/dashboard) now opens with the answer:
 
 * **Posture banner.** The level, its reasons, and the monitor's state
   (live with a green dot, finished, or stopped) with the current run.
@@ -204,7 +204,7 @@ approve it. That is the asset register doing its job, not noise.
   5-second refresh skips the table while you are typing a note.
 * MQTT clients/topics and the device inventory, as before.
 
-![Dashboard on the sample capture](images/dashboard.png)
+![Dashboard on the sample capture](../screenshots/dashboard.png)
 
 **Security of the triage API.** `POST /api/alerts/<id>` changes data, so it
 is protected against cross-site requests. It accepts only
@@ -272,9 +272,9 @@ and read-only mode.
 
 | What | Where |
 |---|---|
-| Schema, runs, triage, upgrades, retention | [`iotmon/storage.py`](../iotmon/storage.py) |
-| Posture, device risk, alert queries, terminal view, export | [`iotmon/state.py`](../iotmon/state.py) |
-| Dashboard API and page | [`iotmon/dashboard/app.py`](../iotmon/dashboard/app.py), [`templates/index.html`](../iotmon/dashboard/templates/index.html) |
-| CLI | [`iotmon/cli.py`](../iotmon/cli.py) (`status`, `alerts`, `db`) |
+| Schema, runs, triage, upgrades, retention | [`src/iotmon/storage.py`](../src/iotmon/storage.py) |
+| Posture, device risk, alert queries, terminal view, export | [`src/iotmon/state.py`](../src/iotmon/state.py) |
+| Dashboard API and page | [`src/iotmon/dashboard/app.py`](../src/iotmon/dashboard/app.py), [`templates/index.html`](../src/iotmon/dashboard/templates/index.html) |
+| CLI | [`src/iotmon/cli.py`](../src/iotmon/cli.py) (`status`, `alerts`, `db`) |
 | Tests | [`tests/test_logging_dashboard.py`](../tests/test_logging_dashboard.py) |
 | Transcripts | [`live-lab-week5.txt`](sample-output/live-lab-week5.txt), [`week5-status.txt`](sample-output/week5-status.txt) |

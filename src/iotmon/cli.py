@@ -14,6 +14,7 @@
     python -m iotmon alerts ack 3 4 --note "..."      # triage alerts
     python -m iotmon alerts export -o alerts.csv      # export for a report or a SIEM
     python -m iotmon db info                          # schema, row counts, monitoring runs
+    python -m iotmon rules -v                         # detection rules and their thresholds
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from . import __version__
 from .assets import DEFAULT_REGISTER, AssetRegister
 from .baseline import DEFAULT_BASELINE, Baseline
 from .config import load_config
+from .models import register_rules
 from .display import Printer
 from .pipeline import Monitor
 from .storage import ALERT_STATUSES, SCHEMA_VERSION, Storage, prune, set_alert_status
@@ -42,7 +44,10 @@ DEFAULT_DB = "data/iotmon.db"
 
 
 def _add_common(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--config", help="TOML file overriding the defaults")
+    p.add_argument("--config", help="site config (YAML) merged over config.yaml")
+    p.add_argument("--rules", help="detection rule file (default rules/detection_rules.yaml)")
+    p.add_argument("--speed", type=float, metavar="X",
+                   help="read: replay the capture in real time, X times faster (for demos)")
     p.add_argument("--db", default=DEFAULT_DB, help=f"SQLite database (default {DEFAULT_DB})")
     p.add_argument("--out-dir", help="where alerts.jsonl / packets.csv go (default: next to the db)")
     p.add_argument("--csv", action="store_true", help="also write every packet to packets.csv")
@@ -58,8 +63,15 @@ def _add_common(p: argparse.ArgumentParser) -> None:
                         f"learn it during the learning period and save it (default path {DEFAULT_BASELINE})")
 
 
+def _config(args) -> dict:
+    config = load_config(args.config, getattr(args, "rules", None))
+    if getattr(args, "rules", None):
+        register_rules(config["rules"])
+    return config
+
+
 def _build_monitor(args, mode: str, source: str | None) -> Monitor:
-    config = load_config(args.config)
+    config = _config(args)
     storage = None
     if not args.no_store:
         storage = Storage(args.db, args.out_dir, packet_csv=args.csv, reset=not args.append,
@@ -96,7 +108,10 @@ def cmd_read(args) -> int:
     from .capture import read_pcap
 
     mon = _build_monitor(args, "read", Path(args.pcap).as_posix())
-    mon.run(read_pcap(args.pcap, limit=args.count))
+    records = read_pcap(args.pcap, limit=args.count)
+    if args.speed:
+        records = _paced(records, args.speed)
+    mon.run(records)
     _summary(mon)
     return 0
 
@@ -115,6 +130,18 @@ def cmd_live(args) -> int:
         return 1
     _summary(mon)
     return 0
+
+
+def _paced(records, speed: float):
+    """Yield records at their capture pace divided by `speed` (wall clock)."""
+    t0 = c0 = None
+    for rec in records:
+        if t0 is None:
+            t0, c0 = rec.ts, time.monotonic()
+        delay = (rec.ts - t0) / speed - (time.monotonic() - c0)
+        if delay > 0:
+            time.sleep(delay)
+        yield rec
 
 
 def _stop(signum, frame):
@@ -355,7 +382,7 @@ def cmd_inventory_learn(args) -> int:
     if args.duration is not None:
         records = _first_seconds(records, args.duration)
     assets = AssetRegister(args.inventory)
-    mon = Monitor(load_config(args.config), assets=assets, new_asset_status="approved")
+    mon = Monitor(_config(args), assets=assets, new_asset_status="approved")
     mon.run(records)
     print(f"learned {len(mon.inventory.devices)} devices from {mon.packets} packets; "
           f"{len(mon.added_assets)} new, register {assets.path.as_posix()} now holds {len(assets)} assets",
@@ -420,7 +447,7 @@ def cmd_baseline_learn(args) -> int:
     """Learn normal behaviour from traffic you trust (the whole capture is the baseline)."""
     from .capture import read_pcap
 
-    config = load_config(args.config)
+    config = _config(args)
     path = Path(args.baseline)
     if path.exists() and not args.force:
         print(f"error: {path.as_posix()} exists - pass --force to replace it", file=sys.stderr)
@@ -455,6 +482,24 @@ def cmd_baseline_show(args) -> int:
         serves = ",".join(map(str, sorted(prof.server_ports))) or "-"
         peers = ", ".join(sorted(prof.external_peers)) or "none (local only)"
         print(f"{ip:<15} {uses[:24]:<24} {serves[:16]:<16} {prof.peak_connections:>9}  {peers}")
+    return 0
+
+
+def cmd_rules(args) -> int:
+    config = _config(args)
+    if args.json:
+        print(json.dumps(config["rules"], indent=2))
+        return 0
+    print(f"{'ID':<8} {'DETECTOR':<20} {'ON':<3} {'SEVERITIES':<22} NAME")
+    for r in config["rules"]:
+        on = "yes" if config["detections"][r["detector"]].get("enabled", True) else "no"
+        print(f"{r['id']:<8} {r['detector']:<20} {on:<3} {', '.join(r['severities']):<22} {r['name']}")
+        if args.verbose:
+            settings = config["detections"][r["detector"]]
+            for k, v in settings.items():
+                if k != "enabled":
+                    print(f"{'':<12}{k} = {v}")
+            print(f"{'':<12}ATT&CK: {'; '.join(r['attack'])}")
     return 0
 
 
@@ -553,7 +598,7 @@ def main(argv: list[str] | None = None) -> int:
     q = inv.add_parser("learn", help="build the register from a capture of trusted traffic")
     q.add_argument("pcap")
     q.add_argument("-d", "--duration", type=float, help="only use the first N seconds of the capture")
-    q.add_argument("--config", help="TOML file overriding the defaults")
+    q.add_argument("--config", help="site config (YAML) merged over config.yaml")
     q.set_defaults(func=cmd_inventory_learn)
     q = inv.add_parser("show", help="list the assets in the register")
     q.add_argument("--json", action="store_true", help="print the register keyed by IP address")
@@ -572,7 +617,7 @@ def main(argv: list[str] | None = None) -> int:
     q = bl.add_parser("learn", help="learn the baseline from a capture of trusted traffic")
     q.add_argument("pcap")
     q.add_argument("-d", "--duration", type=float, help="only use the first N seconds of the capture")
-    q.add_argument("--config", help="TOML file overriding the defaults")
+    q.add_argument("--config", help="site config (YAML) merged over config.yaml")
     q.add_argument("--force", action="store_true", help="replace an existing baseline file")
     q.set_defaults(func=cmd_baseline_learn)
     q = bl.add_parser("show", help="print the learned device profiles")
@@ -581,6 +626,13 @@ def main(argv: list[str] | None = None) -> int:
     for q in bl.choices.values():
         q.add_argument("--baseline", default=DEFAULT_BASELINE, metavar="JSON",
                        help=f"baseline file (default {DEFAULT_BASELINE})")
+
+    p = sub.add_parser("rules", help="list the detection rules (rules/detection_rules.yaml)")
+    p.add_argument("--config", help="site config (YAML) merged over config.yaml")
+    p.add_argument("--rules", help="detection rule file (default rules/detection_rules.yaml)")
+    p.add_argument("-v", "--verbose", action="store_true", help="also print thresholds and ATT&CK techniques")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_rules)
 
     p = sub.add_parser("dashboard", help="serve the web dashboard")
     p.add_argument("--db", default=DEFAULT_DB)

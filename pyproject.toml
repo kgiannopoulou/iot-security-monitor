@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "kgiannopoulou" }]
-dependencies = ["scapy>=2.6,<3", "flask>=3.0,<4"]
+dependencies = ["scapy>=2.6,<3", "flask>=3.0,<4", "pyyaml>=6,<7"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
@@ -19,10 +19,11 @@ dev = ["pytest>=8"]
 iotmon = "iotmon.cli:main"
 
 [tool.setuptools.packages.find]
+where = ["src"]
 include = ["iotmon*"]
 
 [tool.setuptools.package-data]
-iotmon = ["default.toml", "dashboard/templates/*.html"]
+iotmon = ["dashboard/templates/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

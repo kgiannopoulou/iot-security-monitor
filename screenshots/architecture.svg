@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1420" height="560" viewBox="0 0 1420 560" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <title>IoT Security Monitor architecture</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#52514e"/>
+    </marker>
+    <style>
+      .stage { fill: #f6f6f3; stroke: #c3c2b7; stroke-width: 1.5; }
+      .head { font-size: 17px; font-weight: 700; fill: #0b0b0b; }
+      .num { font-size: 13px; font-weight: 700; fill: #ffffff; }
+      .box { fill: #ffffff; stroke: #8f8e86; stroke-width: 1.2; }
+      .key { fill: #eaf2fc; stroke: #2a78d6; stroke-width: 1.4; }
+      .t { font-size: 14px; fill: #0b0b0b; }
+      .s { font-size: 12.5px; fill: #52514e; }
+      .flow { stroke: #52514e; stroke-width: 2; fill: none; marker-end: url(#a); }
+      .dash { stroke: #52514e; stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; marker-end: url(#a); }
+      .lbl { font-size: 12.5px; fill: #52514e; font-style: italic; }
+    </style>
+  </defs>
+  <rect width="1420" height="560" fill="#ffffff"/>
+
+  <!-- stage frames -->
+  <g>
+    <rect class="stage" x="20" y="70" width="240" height="420" rx="10"/>
+    <rect class="stage" x="300" y="70" width="250" height="420" rx="10"/>
+    <rect class="stage" x="590" y="70" width="250" height="420" rx="10"/>
+    <rect class="stage" x="880" y="70" width="240" height="420" rx="10"/>
+    <rect class="stage" x="1160" y="70" width="240" height="420" rx="10"/>
+  </g>
+  <g>
+    <circle cx="44" cy="98" r="12" fill="#2a78d6"/><text class="num" x="44" y="103" text-anchor="middle">1</text>
+    <text class="head" x="64" y="104">IoT / OT devices</text>
+    <circle cx="324" cy="98" r="12" fill="#2a78d6"/><text class="num" x="324" y="103" text-anchor="middle">2</text>
+    <text class="head" x="344" y="104">Python monitor</text>
+    <circle cx="614" cy="98" r="12" fill="#2a78d6"/><text class="num" x="614" y="103" text-anchor="middle">3</text>
+    <text class="head" x="634" y="104">Detection engine</text>
+    <circle cx="904" cy="98" r="12" fill="#2a78d6"/><text class="num" x="904" y="103" text-anchor="middle">4</text>
+    <text class="head" x="924" y="104">Logging / alerts</text>
+    <circle cx="1184" cy="98" r="12" fill="#2a78d6"/><text class="num" x="1184" y="103" text-anchor="middle">5</text>
+    <text class="head" x="1204" y="104">Security dashboard</text>
+  </g>
+
+  <!-- 1 devices -->
+  <rect class="box" x="40" y="130" width="200" height="150" rx="8"/>
+  <text class="t" x="140" y="156" text-anchor="middle" font-weight="600">Docker lab</text>
+  <text class="s" x="140" y="180" text-anchor="middle">Mosquitto MQTT broker</text>
+  <text class="s" x="140" y="200" text-anchor="middle">temperature sensor</text>
+  <text class="s" x="140" y="220" text-anchor="middle">motor drive · smart plug</text>
+  <text class="s" x="140" y="240" text-anchor="middle">IP camera · admin · cloud</text>
+  <text class="s" x="140" y="264" text-anchor="middle">simulator/iot_devices.py</text>
+  <rect class="box" x="40" y="310" width="200" height="90" rx="8"/>
+  <text class="t" x="140" y="338" text-anchor="middle" font-weight="600">pcap replay</text>
+  <text class="s" x="140" y="362" text-anchor="middle">8-min intrusion sample</text>
+  <text class="s" x="140" y="382" text-anchor="middle">+ 10 test scenarios</text>
+  <text class="s" x="140" y="455" text-anchor="middle">all traffic stays in the lab</text>
+
+  <!-- 2 monitor -->
+  <rect class="box" x="320" y="130" width="210" height="110" rx="8"/>
+  <text class="t" x="425" y="156" text-anchor="middle" font-weight="600">capture + parser</text>
+  <text class="s" x="425" y="180" text-anchor="middle">scapy, live or pcap</text>
+  <text class="s" x="425" y="200" text-anchor="middle">Ethernet → ARP/IP → TCP/UDP</text>
+  <text class="s" x="425" y="220" text-anchor="middle">→ MQTT · DNS · HTTP · NTP</text>
+  <rect class="box" x="320" y="270" width="210" height="150" rx="8"/>
+  <text class="t" x="425" y="296" text-anchor="middle" font-weight="600">device tracking</text>
+  <text class="s" x="425" y="320" text-anchor="middle">inventory (MAC, vendor, role)</text>
+  <text class="s" x="425" y="340" text-anchor="middle">asset register: approved/pending</text>
+  <text class="s" x="425" y="360" text-anchor="middle">flows (client → server)</text>
+  <text class="s" x="425" y="380" text-anchor="middle">MQTT clients and topics</text>
+  <text class="s" x="425" y="404" text-anchor="middle">inventory · assets · flows · mqtt</text>
+  <path class="flow" d="M425,240 L425,268"/>
+
+  <!-- 3 detection -->
+  <rect class="box" x="610" y="130" width="210" height="90" rx="8"/>
+  <text class="t" x="715" y="156" text-anchor="middle" font-weight="600">behavioural baseline</text>
+  <text class="s" x="715" y="180" text-anchor="middle">ports, peers, peak rates,</text>
+  <text class="s" x="715" y="200" text-anchor="middle">MQTT topics, per device</text>
+  <rect class="key" x="610" y="250" width="210" height="170" rx="8"/>
+  <text class="t" x="715" y="276" text-anchor="middle" font-weight="600">9 rules · DET-001…009</text>
+  <text class="s" x="715" y="300" text-anchor="middle">new device · port scan</text>
+  <text class="s" x="715" y="320" text-anchor="middle">connection rate · unusual port</text>
+  <text class="s" x="715" y="340" text-anchor="middle">external connection · spike</text>
+  <text class="s" x="715" y="360" text-anchor="middle">failures · ARP spoofing · MQTT</text>
+  <text class="s" x="715" y="386" text-anchor="middle">time windows + thresholds,</text>
+  <text class="s" x="715" y="404" text-anchor="middle">not "if port == X"</text>
+  <path class="flow" d="M715,220 L715,248"/>
+
+  <!-- 4 logging -->
+  <rect class="key" x="900" y="130" width="200" height="170" rx="8"/>
+  <text class="t" x="1000" y="156" text-anchor="middle" font-weight="600">SQLite</text>
+  <text class="s" x="1000" y="180" text-anchor="middle">alerts + evidence</text>
+  <text class="s" x="1000" y="200" text-anchor="middle">triage status + notes</text>
+  <text class="s" x="1000" y="220" text-anchor="middle">devices · traffic/minute</text>
+  <text class="s" x="1000" y="240" text-anchor="middle">flows · MQTT · runs</text>
+  <text class="s" x="1000" y="264" text-anchor="middle">versioned schema,</text>
+  <text class="s" x="1000" y="282" text-anchor="middle">retention</text>
+  <rect class="box" x="900" y="330" width="200" height="90" rx="8"/>
+  <text class="t" x="1000" y="356" text-anchor="middle" font-weight="600">alerts.jsonl · CSV</text>
+  <text class="s" x="1000" y="380" text-anchor="middle">evidence records,</text>
+  <text class="s" x="1000" y="400" text-anchor="middle">ready for a SIEM</text>
+
+  <!-- 5 dashboard -->
+  <rect class="box" x="1180" y="130" width="200" height="90" rx="8"/>
+  <text class="t" x="1280" y="156" text-anchor="middle" font-weight="600">security posture</text>
+  <text class="s" x="1280" y="180" text-anchor="middle">CRITICAL · AT RISK</text>
+  <text class="s" x="1280" y="200" text-anchor="middle">WATCH · OK, with reasons</text>
+  <rect class="box" x="1180" y="250" width="200" height="90" rx="8"/>
+  <text class="t" x="1280" y="276" text-anchor="middle" font-weight="600">web dashboard</text>
+  <text class="s" x="1280" y="300" text-anchor="middle">devices · alerts · traffic</text>
+  <text class="s" x="1280" y="320" text-anchor="middle">filters, triage, export</text>
+  <rect class="box" x="1180" y="370" width="200" height="60" rx="8"/>
+  <text class="t" x="1280" y="396" text-anchor="middle" font-weight="600">iotmon status</text>
+  <text class="s" x="1280" y="416" text-anchor="middle">same view in the terminal</text>
+  <path class="flow" d="M1280,220 L1280,248"/>
+  <path class="flow" d="M1280,340 L1280,368"/>
+
+  <!-- stage-to-stage flows -->
+  <path class="flow" d="M240,205 C270,205 280,185 318,185"/>
+  <text class="lbl" x="250" y="160">passive,</text>
+  <text class="lbl" x="250" y="176">SPAN-style</text>
+  <path class="flow" d="M240,355 C285,355 280,200 318,195"/>
+  <path class="flow" d="M530,345 L608,335"/>
+  <path class="flow" d="M820,320 C860,320 860,215 898,215"/>
+  <path class="flow" d="M820,360 C860,360 860,375 898,375"/>
+  <path class="flow" d="M1100,175 L1178,175"/>
+  <path class="dash" d="M1180,295 C1140,295 1140,260 1102,255"/>
+  <text class="lbl" x="1112" y="318">triage</text>
+
+  <!-- config inputs -->
+  <rect class="box" x="590" y="18" width="250" height="36" rx="18" fill="#fff8e6" stroke="#eda100"/>
+  <text class="t" x="715" y="41" text-anchor="middle">rules/detection_rules.yaml</text>
+  <path class="dash" d="M715,54 C715,62 715,64 715,68"/>
+  <rect class="box" x="300" y="18" width="250" height="36" rx="18" fill="#fff8e6" stroke="#eda100"/>
+  <text class="t" x="425" y="41" text-anchor="middle">config.yaml</text>
+  <path class="dash" d="M425,54 L425,68"/>
+
+  <text class="s" x="20" y="530">The monitor writes, the dashboard reads (SQLite WAL mode); the only write back is an analyst's triage decision. Code: src/iotmon/.</text>
+</svg>
