@@ -1,0 +1,32 @@
+# Filebeat -> Elasticsearch: ship iotmon alerts that are already in Elastic
+# Common Schema, so they land next to other IDS alerts (Security app,
+# Discover, detection rules) without an ingest pipeline.
+#
+#   iotmon live -i eth0 -q --ecs-file /var/log/iotmon/alerts.ecs.ndjson
+#   filebeat -e -c examples/siem/filebeat.yml
+#
+# Tested with Filebeat / Elasticsearch 8.x (ECS 8). Credentials come from the
+# keystore or environment, never this file.
+
+filebeat.inputs:
+  - type: filestream
+    id: iotmon-alerts
+    paths:
+      - /var/log/iotmon/alerts.ecs.ndjson
+    parsers:
+      - ndjson:
+          target: ""            # the document is ECS already: fields at the root
+          overwrite_keys: true  # keep iotmon's @timestamp (packet time), not read time
+          add_error_key: true
+    fields_under_root: true
+    fields:
+      data_stream.dataset: iotmon.alert
+
+setup.template.enabled: false   # use the built-in logs-*-* templates (ECS mappings)
+
+output.elasticsearch:
+  hosts: ["https://elasticsearch.example:9200"]
+  api_key: "${ES_API_KEY}"
+  index: "logs-iotmon.alert-default"
+
+# Useful in Kibana:  event.kind:alert and observer.vendor:iotmon and labels.confidence:high

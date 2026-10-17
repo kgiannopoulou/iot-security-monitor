@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 
+from .confidence import label as confidence_label
 from .config import load_rules
 
 # Well-known ports seen on IoT / OT networks. Used to label traffic and to
@@ -63,6 +64,12 @@ def register_rules(rules: list[dict]) -> None:
     for r in rules:
         RULES[r["detector"]] = (r["id"], r["name"])
         RULE_META[r["detector"]] = RULE_META[r["id"]] = r
+
+
+def register_extra_rule(name: str, rule: dict) -> None:
+    """Add a rule that isn't in the catalogue file (a custom rule, custom_rules.py)."""
+    RULES[name] = (rule["id"], rule["name"])
+    RULE_META[name] = RULE_META[rule["id"]] = rule
 
 
 def rule_id(rule: str) -> str:
@@ -149,6 +156,7 @@ class Alert:
     dst: str | None = None
     mitre: str = ""
     details: dict = field(default_factory=dict)
+    confidence: float | None = None  # 0-1, set by the engine (confidence.py)
 
     @property
     def rule_id(self) -> str:
@@ -167,6 +175,9 @@ class Alert:
             "description": self.title,
             "mitre": self.mitre,
         }
+        if self.confidence is not None:
+            d["confidence"] = self.confidence
+            d["confidence_level"] = confidence_label(self.confidence)
         d.update({k: v for k, v in self.details.items() if k not in d})
         return d
 

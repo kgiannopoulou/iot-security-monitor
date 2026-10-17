@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS alerts (
     run_id    INTEGER,
     status    TEXT NOT NULL DEFAULT 'open',
     note      TEXT,
-    updated   REAL
+    updated   REAL,
+    confidence REAL
 );
 CREATE INDEX IF NOT EXISTS idx_alerts_ts ON alerts(ts);
 
@@ -149,7 +150,7 @@ CREATE TABLE IF NOT EXISTS runs (
 """
 
 # Bumped whenever a table or column is added; `iotmon db info` shows it.
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # Columns added after a table was first released. Databases written by an
 # older version are upgraded in place when they are opened.
@@ -158,7 +159,8 @@ ADDED_COLUMNS = {
                 ("zone", "TEXT"), ("device_type", "TEXT"), ("risk_score", "INTEGER")),  # Week 7
     "alerts": (("rule_id", "TEXT"),                                                 # Week 3
                ("run_id", "INTEGER"), ("status", "TEXT NOT NULL DEFAULT 'open'"),   # Week 5
-               ("note", "TEXT"), ("updated", "REAL")),
+               ("note", "TEXT"), ("updated", "REAL"),
+               ("confidence", "REAL")),                                             # alert confidence
 }
 
 ALERT_STATUSES = ("open", "acknowledged", "resolved", "false_positive")
@@ -271,10 +273,10 @@ class Storage:
 
     def alert(self, alert: Alert) -> None:
         self.db.execute(
-            "INSERT INTO alerts (ts, rule, rule_id, severity, title, src, dst, mitre, details, run_id)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO alerts (ts, rule, rule_id, severity, title, src, dst, mitre, details, run_id, confidence)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (alert.ts, alert.rule, alert.rule_id, alert.severity, alert.title, alert.src, alert.dst,
-             alert.mitre, json.dumps(alert.details), self.run_id),
+             alert.mitre, json.dumps(alert.details), self.run_id, alert.confidence),
         )
         self._run["alerts"] += 1
         self._alerts_jsonl.write(json.dumps(alert.as_dict()) + "\n")

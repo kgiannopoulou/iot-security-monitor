@@ -31,9 +31,10 @@ import math
 from collections import Counter, defaultdict, deque
 from typing import TYPE_CHECKING
 
+from . import confidence
 from .baseline import Baseline
 from .modbus import ModbusTracker
-from .models import KNOWN_SERVICES, Alert, PacketRecord
+from .models import KNOWN_SERVICES, Alert, PacketRecord, rule_meta
 from .mqtt import MqttTracker, wildcard_scope
 from .policy import ZonePolicy
 
@@ -1029,13 +1030,18 @@ DETECTORS = {
 
 class DetectionEngine:
     def __init__(self, config: dict, inventory: Inventory, assets: AssetRegister | None = None,
-                 baseline: Baseline | None = None, policy: ZonePolicy | None = None):
+                 baseline: Baseline | None = None, policy: ZonePolicy | None = None,
+                 custom_rules: list[dict] | None = None):
         self.ctx = Context(inventory, assets, baseline, policy)
+        self._recent: dict[str | None, deque] = defaultdict(lambda: deque(maxlen=50))  # src -> (ts, rule ID)
         self.detectors: list[Detector] = []
         for name, cls in DETECTORS.items():
             cfg = config.get(name, {})
             if cfg.get("enabled", True):
                 self.detectors.append(cls(cfg))
+        from .custom_rules import CustomRuleDetector
+
+        self.detectors += [CustomRuleDetector(r) for r in custom_rules or [] if r.get("enabled", True)]
 
     def process(self, rec: PacketRecord, new_device: Device | None, new_flow: Flow | None = None) -> list[Alert]:
         ctx = self.ctx
@@ -1064,10 +1070,20 @@ class DetectionEngine:
             for a in found:
                 ctx.fired[(a.rule, a.src)] = a.ts
             alerts += found
-        return alerts
+        return self._score(alerts)
 
     def flush(self) -> list[Alert]:
         alerts = []
         for det in self.detectors:
             alerts += det.flush(self.ctx)
+        return self._score(alerts)
+
+    def _score(self, alerts: list[Alert]) -> list[Alert]:
+        """Attach a confidence (and its reasons) to every alert; see confidence.py."""
+        for a in alerts:
+            if a.confidence is None:
+                prior = a.details.pop("_prior", None) or rule_meta(a.rule).get("confidence")
+                a.confidence, reasons = confidence.score(a, self.ctx, prior, self._recent)
+                a.details["confidence_reasons"] = reasons
+            self._recent[a.src].append((a.ts, a.rule_id))
         return alerts

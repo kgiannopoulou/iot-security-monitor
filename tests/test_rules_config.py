@@ -102,10 +102,10 @@ def test_custom_rule_file(tmp_path, capsys):
 def test_invalid_rule_files_are_rejected(tmp_path):
     bad = tmp_path / "bad.yaml"
     bad.write_text("rules:\n  - id: DET-001\n    detector: new_device\n")
-    with pytest.raises(ValueError, match="missing"):
+    with pytest.raises(ValueError, match="'name' is a required property"):  # the JSON schema
         load_rules(bad)
     dup = tmp_path / "dup.yaml"
-    rule = {"detector": "new_device", "name": "x", "severities": ["low"], "attack": []}
+    rule = {"detector": "new_device", "name": "Some rule", "severities": ["low"], "attack": []}
     dup.write_text(yaml.safe_dump({"rules": [{"id": "DET-001", **rule}, {"id": "DET-001", **rule,
                                                                        "detector": "port_scan"}]}))
     with pytest.raises(ValueError, match="duplicate"):

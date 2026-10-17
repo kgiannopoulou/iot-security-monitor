@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from datetime import datetime, timezone
 
+from .confidence import label as confidence_label
 from .models import Alert, PacketRecord
 
 HEADER = f"{'TIME':<9} {'SOURCE':<16} {'DESTINATION':<16} {'PROTOCOL':<8} {'PORT':>5}  {'APP':<9} INFO"
@@ -52,7 +53,11 @@ class Printer:
         tag = f"[ALERT {alert.severity.upper()}]"
         if self.colour:
             tag = f"{COLOURS.get(alert.severity, '')}{tag}{RESET}"
-        print(f"{self._time(alert.ts):<9} {tag} {alert.rule_id} {alert.rule}: {alert.title}", file=self.stream)
+        rule = "custom" if alert.rule.startswith("custom:") else alert.rule
+        print(f"{self._time(alert.ts):<9} {tag} {alert.rule_id} {rule}: {alert.title}", file=self.stream)
+        if alert.confidence is not None:
+            print(f"{'':<9} {'Confidence:':<14} {alert.confidence:.2f} ({confidence_label(alert.confidence)})",
+                  file=self.stream)
         for label, key in DETAIL_RULES.get(alert.rule, ()):
             value = alert.details.get(key)
             if value or value == 0:

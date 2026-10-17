@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kgiannopoulou/iot-security-monitor/rules/schema/rules.schema.json",
+  "title": "iotmon rule files",
+  "description": "Schema for rules/detection_rules.yaml (built-in detectors) and custom rule files (declarative rules, --custom-rules). Validated on load and by `iotmon rules validate`.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "rules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/builtinRule" }
+    },
+    "custom_rules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/customRule" }
+    }
+  },
+  "$defs": {
+    "severity": { "enum": ["info", "low", "medium", "high", "critical"] },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "attack": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^T[0-9]{4}(\\.[0-9]{3})? .+" },
+      "description": "MITRE ATT&CK (Enterprise or ICS) techniques: \"T1046 Network Service Discovery\""
+    },
+    "response": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "oneOrMany": {
+      "oneOf": [
+        { "type": ["string", "integer"] },
+        { "type": "array", "items": { "type": ["string", "integer"] }, "minItems": 1 }
+      ]
+    },
+    "ports": {
+      "oneOf": [
+        { "type": "integer", "minimum": 0, "maximum": 65535 },
+        { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 65535 }, "minItems": 1 }
+      ]
+    },
+    "networks": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+      ],
+      "description": "IP addresses or CIDR networks"
+    },
+    "builtinRule": {
+      "type": "object",
+      "required": ["id", "detector", "name", "severities", "attack"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^DET-[0-9]{3}$" },
+        "detector": { "type": "string", "pattern": "^[a-z_]+$" },
+        "name": { "type": "string", "minLength": 3 },
+        "description": { "type": "string" },
+        "severities": { "type": "array", "items": { "$ref": "#/$defs/severity" }, "minItems": 1 },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "attack": { "$ref": "#/$defs/attack" },
+        "response": { "$ref": "#/$defs/response" },
+        "enabled": { "type": "boolean" },
+        "settings": { "type": "object" }
+      }
+    },
+    "customRule": {
+      "type": "object",
+      "required": ["id", "name", "severity", "match"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^CUS-[0-9]{3}$", "description": "CUS-001 ... (DET- is reserved for built-in rules)" },
+        "name": { "type": "string", "minLength": 3 },
+        "description": { "type": "string" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "attack": { "$ref": "#/$defs/attack" },
+        "response": { "$ref": "#/$defs/response" },
+        "enabled": { "type": "boolean" },
+        "cooldown_s": { "type": "number", "minimum": 0 },
+        "match": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "description": "Every condition must hold (AND); a list means any of its values (OR).",
+          "properties": {
+            "protocol": { "$ref": "#/$defs/oneOrMany" },
+            "app": { "$ref": "#/$defs/oneOrMany" },
+            "dst_port": { "$ref": "#/$defs/ports" },
+            "not_dst_port": { "$ref": "#/$defs/ports" },
+            "src_net": { "$ref": "#/$defs/networks" },
+            "dst_net": { "$ref": "#/$defs/networks" },
+            "not_src_net": { "$ref": "#/$defs/networks" },
+            "not_dst_net": { "$ref": "#/$defs/networks" },
+            "src_zone": { "$ref": "#/$defs/oneOrMany" },
+            "dst_zone": { "$ref": "#/$defs/oneOrMany" },
+            "direction": { "enum": ["internal", "outbound", "inbound"] },
+            "new_connection": { "type": "boolean", "description": "only packets that open a connection (TCP SYN / first UDP packet of a flow)" },
+            "info_contains": { "type": "string", "minLength": 1, "description": "case-insensitive substring of the decoded detail (DNS name, MQTT topic, HTTP line ...)" },
+            "min_length": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "threshold": {
+          "type": "object",
+          "required": ["count", "window_s"],
+          "additionalProperties": false,
+          "description": "Alert when `count` matching packets (or distinct values of `distinct`) are seen per group within `window_s`. Without it, every match alerts (subject to the cooldown).",
+          "properties": {
+            "count": { "type": "integer", "minimum": 2 },
+            "window_s": { "type": "number", "exclusiveMinimum": 0 },
+            "group_by": { "enum": ["src", "dst", "src_dst"] },
+            "distinct": { "enum": ["dst", "dst_port", "src", "info"] }
+          }
+        }
+      }
+    }
+  }
+}

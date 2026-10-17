@@ -1,0 +1,72 @@
+# Example custom rules: site-specific detections without writing Python.
+#
+#   iotmon read samples/iot-lab.pcap -q --custom-rules rules/custom_rules.example.yaml
+#   iotmon rules validate rules/custom_rules.example.yaml
+#
+# Format (full reference: rules/schema/rules.schema.json, docs/custom-rules.md):
+#
+#   id          CUS-nnn (DET- is reserved for the built-in rules)
+#   severity    info | low | medium | high | critical
+#   confidence  0-1 prior that a match is a true positive (default 0.6)
+#   attack      MITRE ATT&CK techniques, "Tnnnn Name"
+#   match       conditions, all of which must hold; a list means any value
+#   threshold   optional: alert at `count` matches per group in `window_s`
+#               (or `count` distinct values of `distinct`)
+#   cooldown_s  quiet period per group after an alert (default 300)
+#
+# These are deliberately specific to the sample network (192.168.1.0/24).
+
+custom_rules:
+  - id: CUS-001
+    name: Telnet attempt inside the IoT network
+    description: >
+      Telnet (23, 2323) is the first thing IoT malware like Mirai tries.
+      Nothing on this network should use it, so any attempt is suspicious.
+    severity: high
+    confidence: 0.85
+    attack: ["T1021 Remote Services", "T1110 Brute Force"]
+    response:
+      - Identify the source and why it speaks Telnet
+      - Disable Telnet on the target if it is enabled
+    match:
+      protocol: TCP
+      dst_port: [23, 2323]
+      src_net: 192.168.1.0/24
+      new_connection: true
+
+  - id: CUS-002
+    name: IRC traffic (botnet command and control)
+    severity: critical
+    confidence: 0.9
+    attack: ["T1071 Application Layer Protocol"]
+    match:
+      protocol: TCP
+      dst_port: [6667, 6668, 6669, 6697]
+      direction: outbound
+      new_connection: true
+
+  - id: CUS-003
+    name: Device contacting many external hosts
+    description: One local device opening connections to 3+ distinct internet hosts in a minute.
+    severity: medium
+    confidence: 0.6
+    attack: ["T1071 Application Layer Protocol"]
+    match:
+      direction: outbound
+      new_connection: true
+    threshold:
+      count: 3
+      window_s: 60
+      group_by: src
+      distinct: dst
+
+  - id: CUS-004
+    name: Plaintext MQTT from outside the IoT VLAN
+    severity: medium
+    confidence: 0.5
+    attack: ["T1557 Adversary-in-the-Middle"]
+    enabled: false   # an example of a rule kept in the file but switched off
+    match:
+      app: MQTT
+      dst_port: 1883
+      not_src_net: 192.168.1.0/24

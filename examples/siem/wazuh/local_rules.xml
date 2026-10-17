@@ -1,0 +1,71 @@
+<!--
+  Wazuh manager: /var/ossec/etc/rules/local_rules.xml
+  Maps iotmon alerts (alerts.jsonl, see ossec.conf.snippet.xml) to Wazuh rule
+  levels by severity, raised one level when iotmon's confidence is high, and
+  tags them with the MITRE technique for the Wazuh MITRE ATT&CK module.
+
+  Test with:  /var/ossec/bin/wazuh-logtest   (paste a line of alerts.jsonl)
+-->
+<group name="iotmon,ids,">
+
+  <!-- Base: any JSON event that came from iotmon's alert file -->
+  <rule id="100500" level="0">
+    <decoded_as>json</decoded_as>
+    <field name="rule">^DET-\d+$|^CUS-\d+$</field>
+    <field name="severity">\w+</field>
+    <description>iotmon: $(rule) $(rule_name)</description>
+  </rule>
+
+  <rule id="100501" level="3">
+    <if_sid>100500</if_sid>
+    <field name="severity">^LOW$|^INFO$</field>
+    <description>iotmon low: $(description)</description>
+  </rule>
+
+  <rule id="100502" level="7">
+    <if_sid>100500</if_sid>
+    <field name="severity">^MEDIUM$</field>
+    <description>iotmon medium: $(description)</description>
+  </rule>
+
+  <rule id="100503" level="10">
+    <if_sid>100500</if_sid>
+    <field name="severity">^HIGH$</field>
+    <description>iotmon high: $(description)</description>
+  </rule>
+
+  <rule id="100504" level="13">
+    <if_sid>100500</if_sid>
+    <field name="severity">^CRITICAL$</field>
+    <description>iotmon CRITICAL: $(description)</description>
+  </rule>
+
+  <!-- High confidence: raise medium/high one level so it pages sooner -->
+  <rule id="100510" level="8">
+    <if_sid>100502</if_sid>
+    <field name="confidence_level">^high$</field>
+    <description>iotmon medium, high confidence: $(description)</description>
+  </rule>
+
+  <rule id="100511" level="12">
+    <if_sid>100503</if_sid>
+    <field name="confidence_level">^high$</field>
+    <description>iotmon high, high confidence: $(description)</description>
+  </rule>
+
+  <!-- Examples of MITRE tagging for the Wazuh ATT&CK dashboard -->
+  <rule id="100520" level="10">
+    <if_sid>100503,100511</if_sid>
+    <field name="rule">^DET-002$</field>
+    <description>iotmon: network scan from $(source_ip)</description>
+    <mitre><id>T1046</id></mitre>
+  </rule>
+
+  <rule id="100521" level="14">
+    <if_sid>100504</if_sid>
+    <field name="rule">^DET-011$</field>
+    <description>iotmon: unauthorized Modbus write to a PLC from $(source_ip)</description>
+    <mitre><id>T0855</id></mitre>
+  </rule>
+
+</group>

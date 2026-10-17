@@ -1,7 +1,12 @@
 """Generate samples/scenarios/*.pcap: one controlled test scenario per core
 detection rule (DET-001 to DET-005), three for MQTT activity (DET-009),
 plus a near-miss scenario that stays
-just under the thresholds and must stay silent.
+just under the thresholds and must stay silent, and benign look-alikes:
+legitimate events that resemble an attack (a broker restart looks like a
+reconnect storm, a firmware download like exfiltration, an admin's SSH
+session like lateral movement). Those must either stay silent or, when a
+rule does fire, carry at most medium confidence: a documented false
+positive an analyst can close quickly.
 
 Every scenario is the same small IoT network as samples/iot-lab.pcap: four
 minutes of normal traffic (the first two are the monitor's learning period),
@@ -19,8 +24,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from generate_sample_pcap import (BROKER, CAMERA, GW, LAPTOP, PLUG, ROGUE, START, TEMP, Capture, baseline,
-                                  l2, mqtt_connect, mqtt_publish)
+from generate_sample_pcap import (BROKER, CAM_CLOUD, CAMERA, CLOUD, GW, LAPTOP, PLUG, ROGUE, START, TEMP, Capture,
+                                  baseline, l2, mqtt_connect, mqtt_publish)
 from scapy.contrib.mqtt import MQTT, MQTTConnack, MQTTSuback, MQTTSubscribe, MQTTTopicQOS
 from scapy.layers.inet import TCP, UDP
 from scapy.layers.ntp import NTP
@@ -38,6 +43,7 @@ class Scenario:
     expect: tuple[str, ...]  # rule IDs that must fire, and no others
     story: str
     inject: Callable[[Capture], None]
+    benign: bool = False  # legitimate activity: any alert must be at most medium confidence
 
     @property
     def path(self) -> Path:
@@ -148,6 +154,42 @@ def mqtt_spoofing(cap: Capture) -> None:
     _publish_on_session(cap, T + 0.5, TEMP, "factory/line1/plug/power", '{"w": 0.0, "on": false}')
 
 
+# -- benign look-alikes ------------------------------------------------------ #
+def broker_restart(cap: Capture) -> None:
+    """Maintenance: the broker restarts, and both MQTT devices reconnect
+    (same client IDs, same credentials) within a few seconds."""
+    for i, (dev, cid) in enumerate(((TEMP, "temp-sensor-01"), (PLUG, "smart-plug-01"))):
+        sport, cseq, sseq = cap.tcp_session(T + 2 + i * 1.5, dev[0], BROKER[0], 1883,
+                                            c2s=[mqtt_connect(cid, "devices", "S3nsor!2026")],
+                                            s2c=[MQTT(type=2) / MQTTConnack(retcode=0)], close=False)
+        cap.mqtt_ports[dev[0]] = [sport, cseq, sseq]
+
+
+def gateway_reboot(cap: Capture) -> None:
+    """The router reboots: every device re-syncs its clock and re-resolves
+    the names it always uses, all at once."""
+    for i, dev in enumerate((TEMP, PLUG, CAMERA, LAPTOP)):
+        cap.ntp(T + i * 0.3, dev[0])
+    cap.dns(T + 1.2, PLUG[0], "api.smartplug.example", CLOUD)
+    cap.dns(T + 1.4, CAMERA[0], "upload.camcloud.example", CAM_CLOUD)
+
+
+def firmware_update(cap: Capture) -> None:
+    """The camera downloads a 1.4 MB firmware image from its own vendor
+    cloud (a known peer, after the usual DNS lookup)."""
+    cap.dns(T - 0.2, CAMERA[0], "upload.camcloud.example", CAM_CLOUD)
+    cap.tcp_session(T, CAMERA[0], CAM_CLOUD, 443, c2s=[Raw(b"\x16\x03\x01" + bytes(300))],
+                    s2c=[Raw(bytes(1400)) for _ in range(1000)])
+
+
+def admin_ssh(cap: Capture) -> None:
+    """The admin laptop opens an SSH session to the broker for maintenance:
+    a port the laptop never used during the baseline."""
+    cap.tcp_session(T, LAPTOP[0], BROKER[0], 22,
+                    c2s=[Raw(b"SSH-2.0-OpenSSH_9.6\r\n")] + [Raw(bytes(200)) for _ in range(8)],
+                    s2c=[Raw(b"SSH-2.0-OpenSSH_9.2p1 Debian\r\n")] + [Raw(bytes(300)) for _ in range(8)])
+
+
 SCENARIOS = [
     Scenario("det-001-new-device", ("DET-001",),
              "Unknown Raspberry Pi joins the network (ARP, NTP, DNS)", new_device),
@@ -167,6 +209,18 @@ SCENARIOS = [
              "Sensor publishes on the smart plug's power topic", mqtt_spoofing),
     Scenario("near-miss-below-thresholds", (),
              "12-port probe, 12 reconnects/min, extra cloud check-in: all under threshold", near_miss),
+    Scenario("benign-broker-restart", (),
+             "Broker restarts; both MQTT devices reconnect with their usual IDs (not a reconnect storm)",
+             broker_restart, benign=True),
+    Scenario("benign-gateway-reboot", (),
+             "Router reboots; every device re-syncs NTP and re-resolves its usual names at once",
+             gateway_reboot, benign=True),
+    Scenario("benign-firmware-update", ("DET-006",),
+             "Camera downloads 1.4 MB of firmware from its own vendor cloud: a spike, but medium confidence",
+             firmware_update, benign=True),
+    Scenario("benign-admin-ssh", ("DET-004",),
+             "Admin laptop SSHes into the broker for maintenance: new port for it, medium confidence",
+             admin_ssh, benign=True),
 ]
 
 

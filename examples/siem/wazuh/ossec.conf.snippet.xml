@@ -1,0 +1,11 @@
+<!--
+  Wazuh agent (on the monitoring host): read iotmon's alerts.jsonl.
+  Add inside <ossec_config> of /var/ossec/etc/ossec.conf, restart the agent.
+  Every line is one JSON alert; Wazuh's built-in JSON decoder extracts the
+  fields, and local_rules.xml (next to this file) turns them into Wazuh alerts.
+-->
+<localfile>
+  <log_format>json</log_format>
+  <location>/opt/iotmon/data/alerts.jsonl</location>
+  <label key="@source">iotmon</label>
+</localfile>

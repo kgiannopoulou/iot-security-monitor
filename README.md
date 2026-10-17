@@ -3,6 +3,10 @@
 [![tests](https://github.com/kgiannopoulou/iot-security-monitor/actions/workflows/tests.yml/badge.svg)](https://github.com/kgiannopoulou/iot-security-monitor/actions/workflows/tests.yml)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
+![Tests](https://img.shields.io/badge/tests-163%20passing-brightgreen)
+![MITRE ATT&CK](https://img.shields.io/badge/MITRE%20ATT%26CK-Enterprise%20%2B%20ICS-red)
+![SIEM](https://img.shields.io/badge/SIEM-ECS%20%C2%B7%20CEF%20%C2%B7%20syslog-blueviolet)
+![Passive](https://img.shields.io/badge/monitoring-passive%20only-informational)
 
 A passive network security monitor for IoT and OT networks, written in
 Python. It watches traffic on a network segment, builds an inventory of the
@@ -21,6 +25,17 @@ telemetry (posture OK), then a Mirai-style intrusion. A rogue Raspberry Pi
 appears (WATCH), scans and brute-forces its way in, and the compromised
 camera starts calling a botnet C2 server (CRITICAL).*
 
+> **Try it in two minutes** — no Docker, no admin rights, no network access needed:
+>
+> ```bash
+> git clone https://github.com/kgiannopoulou/iot-security-monitor && cd iot-security-monitor
+> pip install -e .
+> iotmon read samples/iot-lab.pcap -q     # 12 alerts, with severity, confidence and ATT&CK
+> iotmon alerts                           # the alert queue (ID, severity, confidence, rule)
+> iotmon alert 3                          # one alert as an analyst investigation card
+> iotmon alerts export --format ecs       # the same alerts as Elastic Common Schema for a SIEM
+> ```
+
 **Contents:**
 [Problem](#1-the-problem) ·
 [Architecture](#2-architecture) ·
@@ -28,6 +43,7 @@ camera starts calling a botnet C2 server (CRITICAL).*
 [Detections](#4-detections) ·
 [OT / ICS](#ot--ics-industrial-security) ·
 [Analyst view](#soc-analyst-view) ·
+[Confidence, custom rules, SIEM](#confidence-custom-rules-and-siem-integration) ·
 [Demonstration](#5-demonstration) ·
 [Results](#6-results) ·
 [Limitations](#7-limitations) ·
@@ -195,6 +211,31 @@ Wireshark, and `iotmon summary` produces a SOC security report (text,
 Markdown, JSON or a standalone HTML page). Details:
 **[Week 8: SOC analyst view](docs/08-soc-analyst-view.md)**.
 
+### Confidence, custom rules and SIEM integration
+
+* **Confidence scoring.** Severity says how bad, confidence how sure. Every
+  alert gets a 0–1 score and a reason list: the rule's prior, how far over
+  its threshold, whether the source is an approved asset, and whether the
+  same source raised other rules. The rogue device's alerts score 0.80–0.99;
+  benign look-alikes never reach "high". [docs/custom-rules.md](docs/custom-rules.md#confidence-scoring)
+* **Custom YAML rules, schema-validated.** Site rules without Python
+  (`match:` protocol, ports, networks, zones, direction, text; optional
+  `threshold:` with distinct counting), checked against a
+  [JSON Schema](rules/schema/rules.schema.json) on load and by
+  `iotmon rules validate` — a typo is an error with its path, not a rule
+  that silently never fires. [Examples](rules/custom_rules.example.yaml) ·
+  [docs/custom-rules.md](docs/custom-rules.md)
+* **SIEM output.** Elastic Common Schema NDJSON (`--ecs-file`,
+  `alerts export --format ecs`), CEF, and RFC 5424 syslog forwarding
+  (`--syslog HOST:PORT`), with example configs for
+  [Filebeat, Wazuh, Splunk and rsyslog](examples/siem).
+  [docs/siem-integration.md](docs/siem-integration.md)
+* **Structured logs.** `--log-format json` records each run (rules, source,
+  packets/s), every alert and every error as JSON lines.
+* **Passive by design.** The monitor never transmits on the monitored
+  network — enforced by a test. Deployment guidance and limits:
+  [docs/safety.md](docs/safety.md)
+
 ## 5. Demonstration
 
 ### Quick start (no Docker, no admin rights)
@@ -301,11 +342,13 @@ no attacker image and nothing leaves the lab. Lab guide: [docs/lab-setup.md](doc
 |---|---|
 | Intrusion in the sample capture | Every stage detected: **12 alerts from 8 of the 9 rules**, from the rogue device's first packet to the C2 traffic (DET-008, ARP spoofing, has its own unit and live tests) |
 | False positives on normal traffic | **0 alerts** during the 5-minute baseline of the sample capture (a test) |
-| Recorded test scenarios | **10/10** fire exactly their expected rules, including a near miss at 80% of every threshold that must stay silent |
+| Recorded test scenarios | **13/13** fire exactly their expected rules, including a near miss at 80% of every threshold that must stay silent |
+| Benign look-alikes | **4 scenarios** of legitimate events that resemble attacks (broker restart, gateway reboot, firmware download, admin SSH): two stay silent, two are real false positives at medium confidence, never high |
+| Confidence | Attack alerts average higher confidence than benign look-alikes (a test); the rogue device's alerts after first contact score 0.80–0.99 |
 | Live Docker lab (IoT) | **8/8** scenarios pass, re-run after each week's changes (Weeks 3-6) |
 | Live Docker lab (OT) | **6/6** Modbus/OT scenarios pass in the industrial lab ([`lab/ot/`](lab/ot)) |
-| Throughput | ≈ 4,200 packets/s parsing and ≈ 6,500 packets/s detection on a laptop (Python 3.14, scapy 2.8): ample for an IoT segment, not for a data-centre link |
-| Tests | **132 pytest tests** (parsing, every rule positive and negative, scenarios, end to end, storage, posture, dashboard API, rule-file consistency), run in CI on Python 3.11-3.13 |
+| Throughput | **2,600–3,700 packets/s end to end**, ~7,000 packets/s for detection alone, on a laptop (Python 3.14, scapy 2.8; `python tools/benchmark.py`, [docs/benchmarks.md](docs/benchmarks.md)): ample for an IoT segment, not for a data-centre link |
+| Tests | **163 pytest tests** (parsing, every rule positive and negative, scenarios and benign look-alikes, end to end, storage, posture, dashboard API, rule schema, custom rules, confidence, ECS/CEF/syslog, logs, the no-transmit guarantee), run in CI on Python 3.11-3.13 |
 | False positives found live, and fixed | 3 (see below): each led to a config change, a code fix with a regression test, or a documented, triageable known issue |
 
 The live lab found things the synthetic tests couldn't: the Docker gateway
@@ -318,6 +361,12 @@ false positive through triage). Write-ups with full transcripts: Weeks
 [5](docs/05-logging-dashboard.md), [6](docs/06-project-presentation.md).
 
 ## 7. Limitations
+
+* **Passive only — by design.** It reports an unauthorized PLC write; it
+  cannot stop it, and it sees only what the mirror port or TAP delivers.
+  See [docs/safety.md](docs/safety.md) for safe deployment (receive-only
+  interface, least privilege, authorisation) and what a passive monitor
+  can't do.
 
 * **Encrypted traffic.** With MQTT over TLS (port 8883) topics and payloads
   are hidden. The monitor still sees who connects, how often and how much,
@@ -342,8 +391,8 @@ false positive through triage). Write-ups with full transcripts: Weeks
 1. **Modbus/TCP and DNP3 visibility**, linking this project to my
    [OT/ICS lab](https://github.com/kgiannopoulou/ot-ics-cybersecurity-lab):
    who reads and writes which registers, with which function codes.
-2. **SIEM integration:** ship `alerts.jsonl` to Wazuh or Elastic and export
-   the rules in Sigma format.
+2. **Sigma export** of the rule catalogue and custom rules (SIEM output in
+   ECS, CEF and syslog is done).
 3. **Incident grouping:** six alerts about one compromised sensor are one
    incident, so group them by device and time window.
 4. **Feedback from triage:** let a false-positive decision suggest an
@@ -391,13 +440,18 @@ iot-security-monitor/
 ├── README.md
 ├── config.yaml                  site settings: monitored networks, learning period, flows
 ├── rules/
-│   └── detection_rules.yaml     rule catalogue: IDs, thresholds, severities, ATT&CK
+│   ├── detection_rules.yaml     rule catalogue: IDs, thresholds, severities, confidence, ATT&CK
+│   ├── custom_rules.example.yaml  declarative site rules (--custom-rules)
+│   └── schema/rules.schema.json JSON Schema both rule files are validated against
 ├── src/iotmon/                  the monitor (pip install -e .)
 │   ├── capture.py, parser.py    packet capture and protocol decoding  (the "monitor")
 │   ├── inventory.py, assets.py  device tracking and the asset register ("device tracker")
 │   ├── baseline.py, mqtt.py     per-device behaviour, MQTT clients and topics
 │   ├── modbus.py, policy.py     Modbus/TCP tracking; OT zones + segmentation policy
-│   ├── detections.py            the nine detectors                      ("detector")
+│   ├── detections.py            the built-in detectors                  ("detector")
+│   ├── custom_rules.py          YAML rules: schema validation + matching
+│   ├── confidence.py            per-alert confidence score and reasons
+│   ├── siem.py, logs.py         ECS / CEF / syslog output; structured JSON logs
 │   ├── models.py, state.py      alert records, posture and device risk  ("alerts")
 │   ├── storage.py               SQLite schema, triage, retention        ("database")
 │   ├── pcaptools.py             carve an alert's related packets from its capture
@@ -407,8 +461,9 @@ iot-security-monitor/
 ├── simulator/                   simulated IoT + OT (Modbus PLC) devices and the controlled attacks
 ├── lab/                         Docker Compose labs: IoT (lab/) and industrial OT (lab/ot/)
 ├── samples/                     sample intrusion capture + one capture per test scenario
-├── tools/                       capture generators, scenario runners, demo recorder
-├── tests/                       132 pytest tests
+├── tools/                       capture generators, scenario runners, benchmark, demo recorder
+├── examples/siem/               Filebeat, Wazuh, Splunk and rsyslog configurations
+├── tests/                       163 pytest tests
 ├── screenshots/                 architecture diagram, dashboard screenshots, demo GIF
 └── docs/                        weekly write-ups, architecture, rules, design decisions, lessons learned
 ```
@@ -431,8 +486,9 @@ what they do (`detections`, `storage`), and the brief's names
 | `iotmon summary` | A SOC security report (`--format text\|md\|html\|json`, `-o FILE`) |
 | `iotmon alerts` | Query alerts: `--severity`, `--status` (or `active`), `--rule`, `--ip`, `--since 6h`, `--json` |
 | `iotmon alerts ack` / `resolve` / `fp` / `reopen ID...` | Triage alerts, `--note` for the analyst's reason |
-| `iotmon alerts export` | Filtered alerts with status, note and evidence as CSV or JSON |
-| `iotmon rules [-v]` | The rule catalogue, with thresholds and ATT&CK techniques |
+| `iotmon alerts export` | Filtered alerts with status, note and evidence as CSV or JSON, or `--format ecs` / `cef` for a SIEM |
+| `iotmon rules [-v]` | The rule catalogue (plus `--custom-rules FILE`), with thresholds and ATT&CK techniques |
+| `iotmon rules validate [FILE...]` | Check rule files against the JSON schema; exit 1 if invalid |
 | `iotmon inventory learn / show / approve` | Build and review the asset register |
 | `iotmon baseline learn / show` | Learn and inspect each device's normal behaviour |
 | `iotmon mqtt` | MQTT clients and topics |
@@ -442,8 +498,11 @@ what they do (`detections`, `storage`), and the brief's names
 | `iotmon dashboard` | Web dashboard on `127.0.0.1:8080` (`--read-only` disables triage) |
 
 Common options: `--config site.yaml` (override any setting, see
-[`lab/monitor.yaml`](lab/monitor.yaml)), `--rules FILE`, `--db PATH`,
-`--append`, `--no-store`, `--inventory [JSON]`, `--baseline [JSON]`.
+[`lab/monitor.yaml`](lab/monitor.yaml)), `--rules FILE`, `--custom-rules FILE`,
+`--db PATH`, `--append`, `--no-store`, `--inventory [JSON]`, `--baseline [JSON]`.
+Outputs for `read` / `live`: `--ecs-file PATH`, `--syslog HOST:PORT`
+(`--syslog-format cef|json`, `--syslog-protocol udp|tcp`), `--log-format json|text`,
+`--log-file PATH`.
 
 ## Tests
 
@@ -452,13 +511,16 @@ pip install -e ".[dev]"
 python -m pytest
 ```
 
-106 tests: parsing of every supported protocol, positive and negative cases
+163 tests: parsing of every supported protocol, positive and negative cases
 for each rule, each controlled scenario triggering exactly its rules (and
-the near miss none), the full intrusion producing exactly the expected 12
-alerts, zero alerts during the baseline, the MQTT tracker, the asset
-register workflow, storage and schema upgrades, every posture level, the
-dashboard API including its cross-site checks, and the rule file against
-the alerts the engine produces. CI runs them on every push.
+the near miss none), benign look-alikes never scoring high confidence, the
+full intrusion producing exactly the expected 12 alerts, zero alerts during
+the baseline, the MQTT tracker, the asset register workflow, storage and
+schema upgrades, every posture level, the dashboard API including its
+cross-site checks, the rule file against the alerts the engine produces,
+the JSON schema's error reporting, custom rules, ECS / CEF / syslog output,
+JSON logs, and a check that no module can transmit packets. CI runs them on
+every push.
 
 ## Documentation
 
@@ -472,6 +534,7 @@ the alerts the engine produces. CI runs them on every push.
 | 6 | [Turning it into a presentable project](docs/06-project-presentation.md) |
 | 7 | [Industrial / OT security expansion (Modbus, zones, PLC)](docs/07-ot-ics-expansion.md) |
 | 8 | [From monitor to SOC analyst tool (severity, risk, ATT&CK, investigation, reports)](docs/08-soc-analyst-view.md) |
+| | [Custom rules & confidence](docs/custom-rules.md) · [SIEM integration & logs](docs/siem-integration.md) · [Safety](docs/safety.md) · [Benchmarks](docs/benchmarks.md) |
 | | [Architecture](docs/architecture.md) · [Detection rules](docs/detection-rules.md) · [Design decisions](docs/design-decisions.md) · [Lessons learned](docs/lessons-learned.md) · [Lab setup](docs/lab-setup.md) · [Roadmap](docs/roadmap.md) |
 
 ## Scope

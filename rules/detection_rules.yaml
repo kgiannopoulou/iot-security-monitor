@@ -8,6 +8,9 @@
 #   id          stable rule ID used in alerts, the dashboard and exports
 #   detector    the detector class that implements it (detections.py)
 #   severities  the severities this rule can raise (checked by the tests)
+#   confidence  prior probability that an alert from this rule is a true
+#               positive; each alert's confidence starts here and moves with
+#               its evidence (src/iotmon/confidence.py)
 #   attack      MITRE ATT&CK (Enterprise / ICS) techniques the alerts map to
 #               (checked by the tests against the alerts the engine produces)
 #   settings    thresholds and windows, passed to the detector as-is
@@ -29,6 +32,7 @@ rules:
       A MAC address that is not in the asset register. Without a register,
       a device first seen after the learning period.
     severities: [medium]
+    confidence: 0.6   # prior: how often this rule is right (0-1), see confidence.py
     attack: ["T1200 Hardware Additions", "T0848 Rogue Master (ICS)"]
     response:            # recommended analyst actions (Week 8)
       - Identify the device by MAC/vendor and locate it physically
@@ -47,6 +51,7 @@ rules:
       One source touching many ports on one host (vertical), one port on
       many hosts (horizontal), or ARP-resolving many addresses, in one window.
     severities: [medium, high]
+    confidence: 0.8   # prior: how often this rule is right (0-1), see confidence.py
     attack: ["T1046 Network Service Discovery", "T1018 Remote System Discovery",
              "T0846 Remote System Discovery (ICS)"]
     response:            # recommended analyst actions (Week 8)
@@ -68,6 +73,7 @@ rules:
       New connections from a device in one window above max(min_connections,
       peak_factor x its busiest baseline window).
     severities: [medium]
+    confidence: 0.5   # prior: how often this rule is right (0-1), see confidence.py
     attack: ["T1499 Endpoint Denial of Service", "T0814 Denial of Service (ICS)"]
     response:            # recommended analyst actions (Week 8)
       - Identify the source device and its normal connection rate
@@ -89,6 +95,7 @@ rules:
       a high-risk service (Telnet, IRC, ADB, ...) whatever the baseline;
       plaintext MQTT to the internet.
     severities: [medium, high, critical]
+    confidence: 0.6   # prior: how often this rule is right (0-1), see confidence.py
     attack: ["T1021 Remote Services", "T0886 Remote Services (ICS)", "T1071 Application Layer Protocol"]
     response:            # recommended analyst actions (Week 8)
       - Identify the service and whether it should be exposed
@@ -118,6 +125,7 @@ rules:
       the device is local-only, the address was never resolved by DNS, or
       the device fans out to many new hosts.
     severities: [medium, high]
+    confidence: 0.65   # prior: how often this rule is right (0-1), see confidence.py
     attack: ["T1071 Application Layer Protocol", "T0869 Standard Application Layer Protocol (ICS)"]
     response:            # recommended analyst actions (Week 8)
       - Resolve the destination and check its reputation
@@ -139,6 +147,7 @@ rules:
       max(mean + stddev_factor x sigma, min_ratio x mean, absolute floor) of
       its own recent history.
     severities: [high]
+    confidence: 0.4   # prior: how often this rule is right (0-1), see confidence.py
     attack: ["T1498 Network Denial of Service", "T0814 Denial of Service (ICS)"]
     response:            # recommended analyst actions (Week 8)
       - Identify the device and the direction of the spike
@@ -162,6 +171,7 @@ rules:
       Refused or unanswered connections to one service, or refused MQTT
       logins, in one window.
     severities: [medium, high]
+    confidence: 0.7   # prior: how often this rule is right (0-1), see confidence.py
     attack: ["T1110 Brute Force", "T0812 Default Credentials (ICS)"]
     response:            # recommended analyst actions (Week 8)
       - Identify the source and the service being targeted
@@ -181,6 +191,7 @@ rules:
       An IP address claimed by a second MAC (what ARP spoofing looks like),
       or a known MAC on a new IP.
     severities: [low, high]
+    confidence: 0.7   # prior: how often this rule is right (0-1), see confidence.py
     attack: ["T1557.002 ARP Cache Poisoning", "T0830 Adversary-in-the-Middle (ICS)", "T1036 Masquerading"]
     response:            # recommended analyst actions (Week 8)
       - Compare the MAC/IP binding with the asset register
@@ -201,6 +212,7 @@ rules:
       used, another device's topic (spoofed telemetry), or a subscription to
       every topic.
     severities: [info, low, medium, high]
+    confidence: 0.6   # prior: how often this rule is right (0-1), see confidence.py
     attack: ["T0886 Remote Services (ICS)", "T0883 Internet Accessible Device (ICS)",
              "T0806 Brute Force I/O (ICS)", "T0814 Denial of Service (ICS)",
              "T0856 Spoof Reporting Message (ICS)", "T0855 Unauthorized Command Message (ICS)",
@@ -227,6 +239,7 @@ rules:
       A device appears in the OT zone, or a host starts answering Modbus/TCP
       (a PLC). High when the asset is not declared in the OT policy.
     severities: [medium, high]
+    confidence: 0.6   # prior: how often this rule is right (0-1), see confidence.py
     attack: ["T1200 Hardware Additions", "T0848 Rogue Master (ICS)"]
     response:            # recommended analyst actions (Week 8)
       - Identify the new OT asset and its role
@@ -244,6 +257,7 @@ rules:
       high; writing (changing the process) is critical. An allowed reader
       that writes, without being on the writers list, is high.
     severities: [high, critical]
+    confidence: 0.9   # prior: how often this rule is right (0-1), see confidence.py
     attack: ["T1021 Remote Services", "T0855 Unauthorized Command Message (ICS)",
              "T0836 Modify Parameter (ICS)"]
     response:            # recommended analyst actions (Week 8)
@@ -262,6 +276,7 @@ rules:
       policy does not permit (IT/IoT -> OT). External sources are critical,
       internal ones high.
     severities: [high, critical]
+    confidence: 0.8   # prior: how often this rule is right (0-1), see confidence.py
     attack: ["T1021 Remote Services", "T0886 Remote Services (ICS)"]
     response:            # recommended analyst actions (Week 8)
       - Identify the source host and its zone
@@ -279,6 +294,7 @@ rules:
       list (e.g. Telnet, HTTP or MQTT reaching a PLC). Remote-access protocols
       are high, anything else medium.
     severities: [medium, high]
+    confidence: 0.6   # prior: how often this rule is right (0-1), see confidence.py
     attack: ["T0869 Standard Application Layer Protocol (ICS)"]
     response:            # recommended analyst actions (Week 8)
       - Identify the unexpected protocol and the OT device involved
@@ -296,6 +312,7 @@ rules:
       (a polling flood, or an enumeration of registers): requests per window
       >= max(min_requests, peak_factor x learned peak).
     severities: [medium]
+    confidence: 0.5   # prior: how often this rule is right (0-1), see confidence.py
     attack: ["T0801 Monitor Process State (ICS)", "T0814 Denial of Service (ICS)"]
     response:            # recommended analyst actions (Week 8)
       - Identify the Modbus client and its baseline request rate
@@ -315,6 +332,7 @@ rules:
       An OT-zone device opens a connection to the internet. A PLC reaching
       the internet is critical; any other OT device is high.
     severities: [high, critical]
+    confidence: 0.9   # prior: how often this rule is right (0-1), see confidence.py
     attack: ["T1071 Application Layer Protocol", "T0883 Internet Accessible Device (ICS)"]
     response:            # recommended analyst actions (Week 8)
       - Treat an OT device reaching the internet as a serious incident

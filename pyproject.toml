@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iotmon"
-version = "0.1.0"
+version = "0.2.0"
 description = "Passive network monitoring and detection for IoT/OT networks"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "kgiannopoulou" }]
-dependencies = ["scapy>=2.6,<3", "flask>=3.0,<4", "pyyaml>=6,<7"]
+dependencies = ["scapy>=2.6,<3", "flask>=3.0,<4", "pyyaml>=6,<7", "jsonschema>=4.18,<5"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]

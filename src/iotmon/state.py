@@ -25,6 +25,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .confidence import label as confidence_label
 from .models import SEVERITIES, rule_id
 from .storage import ACTIVE_STATUSES
 
@@ -298,7 +299,7 @@ def _fmt_bytes(n: int) -> str:
 
 
 # -- export ------------------------------------------------------------------ #
-EXPORT_FIELDS = ["id", "timestamp", "rule_id", "rule", "severity", "status", "src", "dst", "title", "mitre",
+EXPORT_FIELDS = ["id", "timestamp", "rule_id", "rule", "severity", "confidence", "status", "src", "dst", "title", "mitre",
                  "note", "details"]
 
 
@@ -414,6 +415,7 @@ def alert_detail(db_path, alert_id: int) -> dict | None:
         return {
             "id": alert_id, "alert_ref": f"ALT-{alert_id:04d}",
             "ts": a["ts"], "severity": a["severity"], "status": a.get("status", "open"),
+            "confidence": a.get("confidence"), "confidence_reasons": a["details"].get("confidence_reasons", []),
             "rule_id": a["rule_id"], "rule": a.get("rule"), "title": a.get("title"),
             "note": a.get("note"), "protocol": _protocol(a), "mitre": a.get("mitre") or "",
             "attack": meta.get("attack", []), "response": meta.get("response", []),
@@ -444,6 +446,8 @@ def render_alert_card(d: dict, utc: bool = False, colour: bool = False, width: i
     L = ["SECURITY ALERT", rule_line,
          f"{'Alert ID:':<14}{d['alert_ref']}",
          f"{'Severity:':<14}" + paint(d["severity"].upper(), SEV_COLOUR.get(d["severity"])),
+         (f"{'Confidence:':<14}{d['confidence']:.2f} ({confidence_label(d['confidence'])})"
+          if d.get("confidence") is not None else None),
          f"{'Rule:':<14}{d['rule_id']}  {d['rule']}",
          f"{'Time:':<14}{datetime.fromtimestamp(d['ts'], tz=tz).strftime('%Y-%m-%d %H:%M:%S')}",
          f"{'Status:':<14}{d['status']}", ""]
@@ -454,6 +458,8 @@ def render_alert_card(d: dict, utc: bool = False, colour: bool = False, width: i
     L += ["Reason:"] + textwrap.wrap(d["title"], width, initial_indent="  ", subsequent_indent="  ")
     if d["response"]:
         L += ["", "Recommended action:"] + [f"  {i}. {s}" for i, s in enumerate(d["response"], 1)]
+    if d.get("confidence_reasons"):
+        L += ["", "Why this confidence:"] + [f"  {r}" for r in d["confidence_reasons"]]
     if d["attack"]:
         L += ["", "MITRE ATT&CK:"] + [f"  - {t}" for t in d["attack"]]
     if d["pcap"]["available"]:

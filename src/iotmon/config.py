@@ -50,7 +50,11 @@ def _read(path: str | Path) -> dict:
 
 def load_rules(path: str | Path | None = None) -> list[dict]:
     """The rule catalogue, validated: every rule has the required fields and a unique ID and detector."""
-    rules = _read(path or DEFAULT_RULES).get("rules") or []
+    from .custom_rules import validate
+
+    document = _read(path or DEFAULT_RULES)
+    validate(document, str(path or DEFAULT_RULES))  # rules/schema/rules.schema.json
+    rules = document.get("rules") or []
     seen: set[str] = set()
     for r in rules:
         missing = [f for f in RULE_FIELDS if f not in r]
@@ -63,7 +67,12 @@ def load_rules(path: str | Path | None = None) -> list[dict]:
     return rules
 
 
-def load_config(path: str | Path | None = None, rules: str | Path | None = None) -> dict:
+def load_config(path: str | Path | None = None, rules: str | Path | None = None,
+                custom_rules: str | Path | None = None) -> dict:
+    """Site config merged over config.yaml, plus the rule catalogue and any
+    custom rules (--custom-rules, or a `custom_rules:` file path in the site config)."""
+    from .custom_rules import load as load_custom
+
     cfg = _read(DEFAULT_CONFIG)
     catalogue = load_rules(rules)
     cfg["rules"] = catalogue
@@ -71,4 +80,8 @@ def load_config(path: str | Path | None = None, rules: str | Path | None = None)
                          for r in catalogue}
     if path:
         cfg = _merge(cfg, _read(path))
+    custom_path = custom_rules or (cfg.get("custom_rules") if isinstance(cfg.get("custom_rules"), str) else None)
+    if custom_path and path and not custom_rules and not Path(custom_path).is_absolute():
+        custom_path = Path(path).parent / custom_path  # relative to the site config
+    cfg["custom_rules"] = load_custom(custom_path) if custom_path else []
     return cfg

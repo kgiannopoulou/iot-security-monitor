@@ -12,6 +12,7 @@ from .detections import DetectionEngine
 from .display import Printer
 from .flows import FlowTable
 from .inventory import Inventory
+from . import logs
 from .models import Alert, PacketRecord
 from .policy import ZonePolicy
 from .storage import Storage
@@ -20,8 +21,11 @@ from .storage import Storage
 class Monitor:
     def __init__(self, config: dict, storage: Storage | None = None, printer: Printer | None = None,
                  assets: AssetRegister | None = None, new_asset_status: str = "pending",
-                 baseline: Baseline | None = None):
+                 baseline: Baseline | None = None, sinks: list | None = None):
         self.config = config
+        self.sinks = sinks or []  # extra alert outputs with .alert(a) / .close(), e.g. siem.SyslogForwarder
+        self.log = logs.get()
+        self._started = time.monotonic()
         self.inventory = Inventory(config["network"]["lab_networks"], config["network"].get("internal_networks"))
         self.flows = FlowTable(idle_timeout=float(config["flows"].get("idle_timeout_s", 60)))
         # An empty register is bootstrapped: the new_device learning period applies,
@@ -37,7 +41,7 @@ class Monitor:
         self.policy = ZonePolicy(config.get("ot"))
         self.inventory.policy = self.policy  # so devices report their OT zone and role
         self.engine = DetectionEngine(config["detections"], self.inventory, None if self.bootstrap else assets,
-                                      baseline, self.policy)
+                                      baseline, self.policy, config.get("custom_rules"))
         self.assets = assets
         self.new_asset_status = new_asset_status
         self.added_assets: list[str] = []
@@ -113,6 +117,13 @@ class Monitor:
 
     def close(self) -> None:
         self._emit(self.engine.flush())
+        elapsed = time.monotonic() - self._started
+        self.log.info("run finished", extra={
+            "packets": self.packets, "alerts": len(self.alerts), "devices": len(self.inventory.devices),
+            "seconds": round(elapsed, 3), "packets_per_s": round(self.packets / elapsed, 1) if elapsed else None,
+            "alerts_by_severity": dict(Counter(a.severity for a in self.alerts))})
+        for sink in self.sinks:
+            sink.close()
         if not self._baseline_saved:
             self.save_baseline()  # capture ended inside the learning period, or `baseline learn`
         if self.assets is not None:
@@ -132,3 +143,11 @@ class Monitor:
                 self.printer.alert(a)
             if self.storage:
                 self.storage.alert(a)
+            for sink in self.sinks:
+                try:
+                    sink.alert(a)
+                except OSError as err:  # a SIEM being down must not stop monitoring
+                    self.log.error("alert sink failed", extra={"sink": type(sink).__name__, "error": str(err)})
+            self.log.warning("alert", extra={"rule_id": a.rule_id, "rule": a.rule, "severity": a.severity,
+                                             "confidence": a.confidence, "src": a.src, "dst": a.dst,
+                                             "title": a.title, "packet_ts": a.ts})

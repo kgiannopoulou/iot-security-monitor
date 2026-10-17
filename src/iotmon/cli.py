@@ -40,6 +40,7 @@ from .assets import DEFAULT_REGISTER, AssetRegister
 from .baseline import DEFAULT_BASELINE, Baseline
 from .config import load_config
 from .models import register_rules
+from . import logs
 from .display import Printer
 from .pipeline import Monitor
 from .storage import ALERT_STATUSES, SCHEMA_VERSION, Storage, prune, set_alert_status
@@ -50,6 +51,8 @@ DEFAULT_DB = "data/iotmon.db"
 def _add_common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--config", help="site config (YAML) merged over config.yaml")
     p.add_argument("--rules", help="detection rule file (default rules/detection_rules.yaml)")
+    p.add_argument("--custom-rules", metavar="YAML",
+                   help="your own declarative rules (see rules/custom_rules.example.yaml), validated on load")
     p.add_argument("--speed", type=float, metavar="X",
                    help="read: replay the capture in real time, X times faster (for demos)")
     p.add_argument("--db", default=DEFAULT_DB, help=f"SQLite database (default {DEFAULT_DB})")
@@ -65,10 +68,20 @@ def _add_common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--baseline", metavar="JSON", nargs="?", const=DEFAULT_BASELINE,
                    help="compare with a saved behavioural baseline; if the file does not exist yet, "
                         f"learn it during the learning period and save it (default path {DEFAULT_BASELINE})")
+    p.add_argument("--syslog", metavar="HOST:PORT",
+                   help="also forward every alert to a syslog collector / SIEM (RFC 5424)")
+    p.add_argument("--syslog-format", choices=("cef", "json"), default="cef",
+                   help="syslog message body: CEF (default) or ECS JSON")
+    p.add_argument("--syslog-protocol", choices=("udp", "tcp"), default="udp")
+    p.add_argument("--ecs-file", metavar="PATH",
+                   help="also append every alert as Elastic Common Schema JSON (one per line) for a log shipper")
+    p.add_argument("--log-format", choices=("json", "text"),
+                   help="structured operational logs (run start/stop, alerts, errors) to stderr or --log-file")
+    p.add_argument("--log-file", metavar="PATH", help="write the operational logs to this file")
 
 
 def _config(args) -> dict:
-    config = load_config(args.config, getattr(args, "rules", None))
+    config = load_config(args.config, getattr(args, "rules", None), getattr(args, "custom_rules", None))
     if getattr(args, "rules", None):
         register_rules(config["rules"])
     return config
@@ -83,7 +96,21 @@ def _build_monitor(args, mode: str, source: str | None) -> Monitor:
     printer = Printer(show_packets=not args.quiet, utc=args.utc)
     assets = AssetRegister(args.inventory) if args.inventory else None
     baseline = _baseline(args.baseline, config) if args.baseline else None
-    return Monitor(config, storage, printer, assets, baseline=baseline)
+    log = logs.setup(args.log_format, args.log_file)
+    sinks = []
+    if args.syslog:
+        from .siem import SyslogForwarder
+
+        sinks.append(SyslogForwarder(args.syslog, args.syslog_format, args.syslog_protocol))
+    if args.ecs_file:
+        from .siem import EcsFileSink
+
+        sinks.append(EcsFileSink(args.ecs_file))
+    log.info("run started", extra={"mode": mode, "source": source, "rules": len(config["rules"]),
+                                   "enabled_rules": sum(1 for r in config["rules"] if r.get("enabled", True)),
+                                   "inventory": args.inventory, "baseline": args.baseline,
+                                   "syslog": args.syslog})
+    return Monitor(config, storage, printer, assets, baseline=baseline, sinks=sinks)
 
 
 def _baseline(path: str, config: dict) -> Baseline:
@@ -320,11 +347,12 @@ def cmd_alerts_list(args) -> int:
         print(json.dumps(rows, indent=2))
         return 0
     tz = timezone.utc if args.utc else None
-    print(f"{'ID':>4}  {'TIME':<19}  {'SEVERITY':<8} {'RULE':<8} {'STATUS':<14} ALERT")
+    print(f"{'ID':>4}  {'TIME':<19}  {'SEVERITY':<8} {'CONF':<4} {'RULE':<8} {'STATUS':<14} ALERT")
     for a in reversed(rows):  # oldest first reads like a timeline
         when = datetime.fromtimestamp(a["ts"], tz=tz).strftime("%Y-%m-%d %H:%M:%S")
-        print(f"{a['id']:>4}  {when}  {a['severity'].upper():<8} {a['rule_id'] or '':<8} {a['status']:<14} "
-              f"{a['title']}" + (f"\n{'':<59}note: {a['note']}" if a.get("note") else ""))
+        conf = f"{a['confidence']:.2f}" if a.get("confidence") is not None else "-"
+        print(f"{a['id']:>4}  {when}  {a['severity'].upper():<8} {conf:<4} {a['rule_id'] or '':<8} {a['status']:<14} "
+              f"{a['title']}" + (f"\n{'':<64}note: {a['note']}" if a.get("note") else ""))
     print(f"\n{len(rows)} alert{'s' if len(rows) != 1 else ''}", file=sys.stderr)
     return 0
 
@@ -418,6 +446,11 @@ def cmd_alerts_export(args) -> int:
         if args.format == "json":
             json.dump([{**r, "details": json.loads(r["details"])} for r in export_rows(alerts)], out, indent=2)
             out.write("\n")
+        elif args.format in ("ecs", "cef"):
+            from .siem import to_cef, to_ecs
+
+            for row in reversed(alerts):  # oldest first, one per line (NDJSON / CEF lines)
+                out.write((json.dumps(to_ecs(row)) if args.format == "ecs" else to_cef(row)) + "\n")
         else:
             write_csv(alerts, out)
     finally:
@@ -589,10 +622,28 @@ def cmd_baseline_show(args) -> int:
     return 0
 
 
+def cmd_rules_validate(args) -> int:
+    """Check rule files against rules/schema/rules.schema.json (CI-friendly exit code)."""
+    from .config import DEFAULT_RULES, _read
+    from .custom_rules import RuleFileError, validate
+
+    failed = 0
+    for path in args.files or [str(DEFAULT_RULES)]:
+        try:
+            document = _read(path) or {}
+            validate(document, path)
+            count = len(document.get("rules") or []) + len(document.get("custom_rules") or [])
+            print(f"ok      {path}  ({count} rules)")
+        except (RuleFileError, FileNotFoundError, ValueError) as err:
+            failed += 1
+            print(f"invalid {err}")
+    return 1 if failed else 0
+
+
 def cmd_rules(args) -> int:
     config = _config(args)
     if args.json:
-        print(json.dumps(config["rules"], indent=2))
+        print(json.dumps(config["rules"] + config["custom_rules"], indent=2))
         return 0
     print(f"{'ID':<8} {'DETECTOR':<20} {'ON':<3} {'SEVERITIES':<22} NAME")
     for r in config["rules"]:
@@ -606,6 +657,13 @@ def cmd_rules(args) -> int:
             print(f"{'':<12}ATT&CK: {'; '.join(r['attack'])}")
             if r.get("response"):
                 print(f"{'':<12}Response: {r['response'][0]}")
+    for r in config["custom_rules"]:
+        on = "yes" if r.get("enabled", True) else "no"
+        print(f"{r['id']:<8} {'(custom)':<20} {on:<3} {r['severity']:<22} {r['name']}")
+        if args.verbose:
+            print(f"{'':<12}match: {json.dumps(r['match'])}")
+            if r.get("threshold"):
+                print(f"{'':<12}threshold: {json.dumps(r['threshold'])}")
     return 0
 
 
@@ -687,7 +745,8 @@ def main(argv: list[str] | None = None) -> int:
         q.set_defaults(func=cmd_alerts_triage, new_status=status)
     q = al.add_parser("export", parents=[filters], help="export alerts to CSV or JSON (oldest first)")
     q.add_argument("-o", "--output", help="file to write (default stdout)")
-    q.add_argument("--format", choices=("csv", "json"), default="csv")
+    q.add_argument("--format", choices=("csv", "json", "ecs", "cef"), default="csv",
+                   help="csv / json for reports; ecs (Elastic Common Schema NDJSON) or cef lines for a SIEM")
     q.set_defaults(func=cmd_alerts_export)
 
     p = sub.add_parser("alert", help="the full analyst investigation card for one alert")
@@ -761,9 +820,14 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("rules", help="list the detection rules (rules/detection_rules.yaml)")
     p.add_argument("--config", help="site config (YAML) merged over config.yaml")
     p.add_argument("--rules", help="detection rule file (default rules/detection_rules.yaml)")
+    p.add_argument("--custom-rules", metavar="YAML", help="also list the rules in this custom rule file")
     p.add_argument("-v", "--verbose", action="store_true", help="also print thresholds and ATT&CK techniques")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_rules)
+    rsub = p.add_subparsers(dest="rules_command")
+    q = rsub.add_parser("validate", help="check rule files against the JSON schema (exit 1 if any is invalid)")
+    q.add_argument("files", nargs="*", help="rule files (default: rules/detection_rules.yaml)")
+    q.set_defaults(func=cmd_rules_validate)
 
     p = sub.add_parser("dashboard", help="serve the web dashboard")
     p.add_argument("--db", default=DEFAULT_DB)
@@ -773,4 +837,10 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_dashboard)
 
     args = parser.parse_args(argv)
-    return args.func(args)
+    from .custom_rules import RuleFileError
+
+    try:
+        return args.func(args)
+    except RuleFileError as err:  # a rule file that fails the schema: say exactly where
+        print(f"error: invalid rule file {err}", file=sys.stderr)
+        return 2

@@ -29,3 +29,8 @@
 | | TLS SNI / JA3 fingerprints for encrypted-traffic visibility | ☐ |
 | | Ingest Mosquitto broker logs (auth failures stay visible under TLS) | ☐ |
 | | Run on a Raspberry Pi with a switch SPAN port against real devices | ☐ |
+
+## Hardening
+
+- Run the container as a non-root user with only `CAP_NET_RAW` / `CAP_NET_ADMIN` (see [safety.md](safety.md)).
+- Sigma export of the rule catalogue and custom rules.
