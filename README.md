@@ -386,11 +386,34 @@ false positive through triage). Write-ups with full transcripts: Weeks
 * **Simulated devices.** No real PLCs, cameras or sensors were tested; the
   lab devices are Python scripts with realistic MACs and traffic.
 
+### Production considerations
+
+What would have to change before this watched a real plant or office network:
+
+* **Sensor** — a dedicated, hardened box on a receive-only SPAN/TAP interface,
+  parsing with Zeek or Suricata at line rate and feeding this detection layer
+  (scapy is the bottleneck above a few thousand packets per second).
+* **Storage and access** — alerts in PostgreSQL or straight into the SIEM
+  (ECS/CEF/syslog output already exists) instead of a local SQLite file; a
+  dashboard behind authentication with roles and an audit trail of triage
+  decisions; TLS on the web UI.
+* **Change management for rules** — custom rules are schema-validated today;
+  production would add review, versioning and a test capture per rule before
+  deployment, plus tuning per site.
+* **Baseline governance** — learn from a reviewed, known-clean period, store
+  baselines with a version and expiry, and re-learn after planned changes
+  (new devices, firmware updates) rather than continuously.
+* **Resilience** — run as a supervised service with health checks, alert on
+  the monitor itself going quiet (no packets = blind sensor, not a calm
+  network), and forward logs off the box.
+* **Legal and safety** — written authorisation for monitoring, privacy review
+  of captured payloads, and retention limits on pcaps (see [safety.md](docs/safety.md)).
+
 ## 8. Future improvements
 
-1. **Modbus/TCP and DNP3 visibility**, linking this project to my
-   [OT/ICS lab](https://github.com/kgiannopoulou/ot-ics-cybersecurity-lab):
-   who reads and writes which registers, with which function codes.
+1. **DNP3, EtherNet/IP and S7comm decoding** (Modbus/TCP is done, Week 7),
+   with per-register range checks, linking further to my
+   [OT/ICS lab](https://github.com/kgiannopoulou/ot-ics-cybersecurity-lab).
 2. **Sigma export** of the rule catalogue and custom rules (SIEM output in
    ECS, CEF and syslog is done).
 3. **Incident grouping:** six alerts about one compromised sensor are one
@@ -548,4 +571,4 @@ Related projects: [OT/ICS Cybersecurity Lab](https://github.com/kgiannopoulou/ot
 
 ## License
 
-MIT
+[MIT](LICENSE) © 2026 kgiannopoulou · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
